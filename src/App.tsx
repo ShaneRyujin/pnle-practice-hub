@@ -1408,6 +1408,7 @@ export default function Home() {
                       const choiceButton = (
                         <button
                           className={`exam-choice ${isSelected ? "selected" : ""} ${isEliminated ? "eliminated" : ""} ${isCorrect ? "correct" : ""} ${isWrong ? "wrong" : ""}`}
+                          onPointerDownCapture={() => !revealed && !isEliminated && setSelected(letter)}
                           onClick={() => !revealed && !isEliminated && setSelected(letter)}
                           role="radio"
                           aria-checked={isSelected}
