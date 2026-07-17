@@ -200,7 +200,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .exam-classification i { color: #9ba7a2; font-style: normal; }.exam-classification small { margin-left: auto; color: #9a978f; font-size: 8px; }
 .exam-situation-box { min-height: 120px; margin-bottom: 13px; padding: 25px 30px; border: 1px solid #b9cbc3; border-radius: 17px; background: #f7fbf8; }
 .exam-situation-box p { margin: 15px 0 0; color: #2d3837; font-family: Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.65; }
-.exam-question-box h2 { margin: 15px 0 0; color: #2d3837; font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 400; line-height: 1.65; letter-spacing: 0; }
+.exam-question-box h2 { margin: 15px 0 0; color: #2d3837; font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 400; line-height: 1.65; letter-spacing: 0; white-space: pre-wrap; }
 .flag-button { min-height: 34px; margin: 14px 0 16px; padding: 0 13px; border: 1px solid #bfc9c3; border-radius: 18px; display: inline-flex; align-items: center; gap: 7px; background: #fbfaf5; color: #536961; cursor: pointer; font-size: 10px; font-weight: 650; }
 .flag-button.flagged { border-color: #d7a15e; background: #fff0db; color: #aa6525; }
 .exam-choice-list { margin-top: 15px; display: grid; gap: 9px; }
