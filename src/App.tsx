@@ -539,7 +539,7 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n");
   const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*\d{1,3}\.\s+|$)/g)];
   let latestSituation = "";
-  return matches.map((match, index) => {
+  const candidates: Array<PdfCandidate | null> = matches.map((match, index) => {
     const block = match[0];
     const before = normalized.slice(0, match.index);
     const situations = [...before.matchAll(/SITUATION\s+\d+\s*[-–:]\s*([\s\S]*?)(?=\n\s*\d{1,3}\.\s+)/gi)];
@@ -556,7 +556,8 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     const rationales = {} as Partial<Record<Letter, string>>;
     [...feedback.matchAll(/\b([A-D])\.\s*([\s\S]*?)(?=\s+[A-D]\.|$)/gi)].forEach((note) => { rationales[note[1].toUpperCase() as Letter] = note[2].replace(/\s+/g, " ").trim(); });
     return { id: `pdf-${index}`, situation: latestSituation || undefined, stem, choices, correct, rationales, topic: "", answerDetected: Boolean(explicit) };
-  }).filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter])));
+  });
+  return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter])));
 }
 
 function scoreTone(score: number) {
