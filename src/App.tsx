@@ -605,6 +605,7 @@ export default function Home() {
   const [practiceSubject, setPracticeSubject] = useState("All subjects");
   const [bankQuery, setBankQuery] = useState("");
   const [bankNp, setBankNp] = useState<Practice | "All">("All");
+  const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [importText, setImportText] = useState("");
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pdfCandidates, setPdfCandidates] = useState<PdfCandidate[]>([]);
@@ -1113,6 +1114,29 @@ export default function Home() {
     setAttempts(nextAttempts);
     localStorage.setItem("pnle-imported-questions", JSON.stringify(nextImported));
     localStorage.setItem("pnle-attempts", JSON.stringify(nextAttempts));
+    setSelectedImportIds((ids) => ids.filter((selectedId) => selectedId !== id));
+  }
+
+  function toggleImportedSelection(id: string) {
+    setSelectedImportIds((ids) => ids.includes(id) ? ids.filter((selectedId) => selectedId !== id) : [...ids, id]);
+  }
+
+  function toggleVisibleImported() {
+    const visibleIds = bankQuestions.filter((question) => question.source === "imported").map((question) => question.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedImportIds.includes(id));
+    setSelectedImportIds((ids) => allSelected ? ids.filter((id) => !visibleIds.includes(id)) : [...new Set([...ids, ...visibleIds])]);
+  }
+
+  function deleteSelectedImports() {
+    if (!selectedImportIds.length) return;
+    const selected = new Set(selectedImportIds);
+    const nextImported = imported.filter((question) => !selected.has(question.id));
+    const nextAttempts = attempts.filter((attempt) => !selected.has(attempt.questionId));
+    setImported(nextImported);
+    setAttempts(nextAttempts);
+    setSelectedImportIds([]);
+    localStorage.setItem("pnle-imported-questions", JSON.stringify(nextImported));
+    localStorage.setItem("pnle-attempts", JSON.stringify(nextAttempts));
   }
 
   function resetProgress() {
@@ -1140,7 +1164,6 @@ export default function Home() {
   const navItems: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
     { id: "practice", label: "Practice", icon: ClipboardCheck },
-    { id: "bank", label: "Question bank", icon: BookOpen },
     { id: "vault", label: "The Vault", icon: BookOpen },
     { id: "import", label: "Import questions", icon: FileUp },
   ];
@@ -1180,6 +1203,10 @@ export default function Home() {
             </button>
           ))}
         </div>
+
+        <button className={`sidebar-bank-link ${view === "bank" ? "active" : ""}`} onClick={() => navigate("bank")}>
+          <BookOpen size={18} /><span>Question bank</span><small>{questions.length}</small>
+        </button>
 
         <div className="sidebar-footer">
           <div className="mini-progress">
@@ -1476,11 +1503,15 @@ export default function Home() {
                 {PRACTICES.map((np) => <button key={np} className={bankNp === np ? "active" : ""} onClick={() => setBankNp(np)}>{np}</button>)}
               </div>
             </div>
+            <div className="batch-import-actions">
+              <label><input type="checkbox" checked={bankQuestions.filter((question) => question.source === "imported").length > 0 && bankQuestions.filter((question) => question.source === "imported").every((question) => selectedImportIds.includes(question.id))} onChange={toggleVisibleImported} /> Select imported questions shown</label>
+              <div>{selectedImportIds.length > 0 && <><span>{selectedImportIds.length} selected</span><button className="batch-delete-button" onClick={deleteSelectedImports}><Trash2 size={15} /> Delete selected</button></>}</div>
+            </div>
             <div className="bank-list">
-              <div className="bank-list-head"><span>Question</span><span>Classification</span><span>Source</span><span /></div>
+              <div className="bank-list-head"><span>Question</span><span>Classification</span><span>Source</span><span>Actions</span></div>
               {bankQuestions.map((question, index) => (
                 <article key={question.id} className="bank-row">
-                  <div className="bank-question"><span>{String(index + 1).padStart(2, "0")}</span><p>{question.stem}</p></div>
+                  <div className="bank-question">{question.source === "imported" ? <input className="import-select" type="checkbox" checked={selectedImportIds.includes(question.id)} onChange={() => toggleImportedSelection(question.id)} aria-label={`Select question ${index + 1}`} /> : <span className="bank-number">{String(index + 1).padStart(2, "0")}</span>}<p>{question.stem}</p></div>
                   <div className="bank-class"><strong>{question.np} · {question.subject}</strong><small>{question.topic}</small></div>
                   <span className={`source-label ${question.source}`}>{question.source}</span>
                   <div className="bank-actions">
