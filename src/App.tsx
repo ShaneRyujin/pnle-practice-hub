@@ -644,6 +644,8 @@ export default function Home() {
   const [importGuideOpen, setImportGuideOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);
   const [bulkAiProgress, setBulkAiProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [pdfAiFile, setPdfAiFile] = useState<File | null>(null);
+  const [pdfScanProgress, setPdfScanProgress] = useState<{ completed: number; total: number } | null>(null);
   const [pdfCandidates, setPdfCandidates] = useState<PdfCandidate[]>([]);
   const [batchNp, setBatchNp] = useState<Practice>("NP1");
   const [batchSubject, setBatchSubject] = useState("Community Health Nursing");
@@ -1092,6 +1094,7 @@ export default function Home() {
     if (!file) return;
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       try {
+        setPdfAiFile(file);
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
         const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
         const pages: string[] = [];
@@ -1246,6 +1249,44 @@ export default function Home() {
 
     setBulkAiProgress(null);
     setImportMessage(failures.length ? { type: "error", text: `AI completed what it could. ${failures.slice(0, 2).join(" · ")}` } : { type: "success", text: `AI enhanced rationales for all ${snapshot.length} extracted questions. Review them before importing.` });
+  }
+
+  async function scanPdfStructureWithAi() {
+    if (!pdfAiFile || pdfScanProgress) return;
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+      const document = await pdfjs.getDocument({ data: await pdfAiFile.arrayBuffer() }).promise;
+      setPdfScanProgress({ completed: 0, total: document.numPages });
+      setImportMessage(null);
+      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+        const page = await document.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1.15 });
+        const canvas = window.document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Your browser could not prepare this PDF page for AI review.");
+        await page.render({ canvas, canvasContext: context, viewport }).promise;
+        const content = await page.getTextContent();
+        const imageData = canvas.toDataURL("image/jpeg", 0.72).split(",")[1];
+        const result = await fetch("/api/scan-pdf-page", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageNumber, imageData, text: textContentToPdfLines(content.items) }) });
+        const data = await result.json() as { questions?: Array<{ number: number; situation?: string; correct?: Letter }>; error?: string };
+        if (!result.ok) throw new Error(data.error || `AI could not scan page ${pageNumber}.`);
+        if (data.questions?.length) {
+          const findings = new Map(data.questions.map((question) => [question.number, question]));
+          setPdfCandidates((items) => items.map((item) => {
+            const finding = item.questionNumber ? findings.get(item.questionNumber) : undefined;
+            return finding ? { ...item, situation: finding.situation || item.situation, correct: finding.correct || item.correct, answerDetected: item.answerDetected || Boolean(finding.correct) } : item;
+          }));
+        }
+        setPdfScanProgress({ completed: pageNumber, total: document.numPages });
+      }
+      setImportMessage({ type: "success", text: "AI scanned the PDF layout for situation headings and highlighted answer choices. Review the results before importing." });
+    } catch (error) {
+      setImportMessage({ type: "error", text: error instanceof Error ? error.message : "AI PDF scan failed." });
+    } finally {
+      setPdfScanProgress(null);
+    }
   }
 
   function deleteImported(id: string) {
@@ -1691,7 +1732,7 @@ export default function Home() {
                 <button className="primary-button import-button" disabled={!importText.trim()} onClick={importQuestions}><Upload size={17} /> Validate and import</button>
                 {pdfCandidates.length > 0 && (
                   <section className="pdf-review" aria-label="PDF import review">
-                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><div className="pdf-review-actions"><span className="pdf-count">{pdfCandidates.length} items</span><button type="button" className="batch-ai-button" disabled={Boolean(bulkAiProgress)} onClick={enhancePdfBatchWithAi}><Sparkles size={14} /> {bulkAiProgress ? `Enhancing ${bulkAiProgress.completed}/${bulkAiProgress.total}…` : "Enhance all rationales with AI"}</button></div></div>
+                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><div className="pdf-review-actions"><span className="pdf-count">{pdfCandidates.length} items</span><button type="button" className="batch-ai-button" disabled={Boolean(pdfScanProgress)} onClick={scanPdfStructureWithAi}><Sparkles size={14} /> {pdfScanProgress ? `Scanning pages ${pdfScanProgress.completed}/${pdfScanProgress.total}…` : "AI scan situations & answers"}</button><button type="button" className="batch-ai-button" disabled={Boolean(bulkAiProgress) || Boolean(pdfScanProgress)} onClick={enhancePdfBatchWithAi}><Sparkles size={14} /> {bulkAiProgress ? `Enhancing ${bulkAiProgress.completed}/${bulkAiProgress.total}…` : "Enhance all rationales with AI"}</button></div></div>
                     <div className="batch-fields">
                       <label><span>Nursing Practice</span><select value={batchNp} onChange={(event) => setBatchNp(event.target.value as Practice)}>{PRACTICES.map((np) => <option key={np}>{np}</option>)}</select></label>
                       <label><span>Subject</span><input value={batchSubject} onChange={(event) => setBatchSubject(event.target.value)} list="pdf-subjects" /></label>
