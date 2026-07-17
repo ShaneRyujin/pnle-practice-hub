@@ -626,6 +626,7 @@ export default function Home() {
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importGuideOpen, setImportGuideOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState<string | null>(null);
+  const [bulkAiProgress, setBulkAiProgress] = useState<{ completed: number; total: number } | null>(null);
   const [pdfCandidates, setPdfCandidates] = useState<PdfCandidate[]>([]);
   const [batchNp, setBatchNp] = useState<Practice>("NP1");
   const [batchSubject, setBatchSubject] = useState("Community Health Nursing");
@@ -1200,6 +1201,36 @@ export default function Home() {
     }
   }
 
+  async function enhancePdfBatchWithAi() {
+    if (!pdfCandidates.length || bulkAiProgress) return;
+    const snapshot = [...pdfCandidates];
+    const chunkSize = 5;
+    const failures: string[] = [];
+    setBulkAiProgress({ completed: 0, total: snapshot.length });
+    setImportMessage(null);
+
+    for (let start = 0; start < snapshot.length; start += chunkSize) {
+      const chunk = snapshot.slice(start, start + chunkSize);
+      try {
+        const result = await fetch("/api/ai-rationales", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: chunk.map((item) => ({ id: item.id, situation: item.situation, stem: item.stem, choices: item.choices, correct: item.correct, rationales: item.rationales })) }),
+        });
+        const data = await result.json() as { items?: Array<{ id: string; rationales: Partial<Record<Letter, string>> }>; error?: string };
+        if (!result.ok || !data.items) throw new Error(data.error || "AI batch generation failed.");
+        const results = new Map(data.items.map((item) => [item.id, item.rationales]));
+        setPdfCandidates((items) => items.map((item) => ({ ...item, rationales: { ...item.rationales, ...(results.get(item.id) || {}) } })));
+      } catch (error) {
+        failures.push(`Q${start + 1}–${Math.min(start + chunk.length, snapshot.length)}: ${error instanceof Error ? error.message : "generation failed"}`);
+      }
+      setBulkAiProgress({ completed: Math.min(start + chunk.length, snapshot.length), total: snapshot.length });
+    }
+
+    setBulkAiProgress(null);
+    setImportMessage(failures.length ? { type: "error", text: `AI completed what it could. ${failures.slice(0, 2).join(" · ")}` } : { type: "success", text: `AI enhanced rationales for all ${snapshot.length} extracted questions. Review them before importing.` });
+  }
+
   function deleteImported(id: string) {
     const nextImported = imported.filter((question) => question.id !== id);
     const nextAttempts = attempts.filter((attempt) => attempt.questionId !== id);
@@ -1643,7 +1674,7 @@ export default function Home() {
                 <button className="primary-button import-button" disabled={!importText.trim()} onClick={importQuestions}><Upload size={17} /> Validate and import</button>
                 {pdfCandidates.length > 0 && (
                   <section className="pdf-review" aria-label="PDF import review">
-                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><span className="pdf-count">{pdfCandidates.length} items</span></div>
+                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><div className="pdf-review-actions"><span className="pdf-count">{pdfCandidates.length} items</span><button type="button" className="batch-ai-button" disabled={Boolean(bulkAiProgress)} onClick={enhancePdfBatchWithAi}><Sparkles size={14} /> {bulkAiProgress ? `Enhancing ${bulkAiProgress.completed}/${bulkAiProgress.total}…` : "Enhance all rationales with AI"}</button></div></div>
                     <div className="batch-fields">
                       <label><span>Nursing Practice</span><select value={batchNp} onChange={(event) => setBatchNp(event.target.value as Practice)}>{PRACTICES.map((np) => <option key={np}>{np}</option>)}</select></label>
                       <label><span>Subject</span><input value={batchSubject} onChange={(event) => setBatchSubject(event.target.value)} list="pdf-subjects" /></label>
