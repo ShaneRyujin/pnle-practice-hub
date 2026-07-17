@@ -618,6 +618,7 @@ export default function Home() {
   const [selectedImportIds, setSelectedImportIds] = useState<string[]>([]);
   const [importText, setImportText] = useState("");
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [importGuideOpen, setImportGuideOpen] = useState(false);
   const [pdfCandidates, setPdfCandidates] = useState<PdfCandidate[]>([]);
   const [batchNp, setBatchNp] = useState<Practice>("NP1");
   const [batchSubject, setBatchSubject] = useState("Community Health Nursing");
@@ -1563,7 +1564,7 @@ export default function Home() {
               <div><span className="section-kicker">BUILD YOUR REVIEW BANK</span><h2>Import questions in one batch</h2><p>Upload CSV, TSV, JSON, or a text-based PDF. PDFs are extracted into a review step before import.</p></div>
               <button className="secondary-button" onClick={downloadTemplate}><Download size={17} /> Download CSV template</button>
             </div>
-            <div className="import-grid">
+            <div className={`import-grid ${importGuideOpen ? "guide-open" : "guide-collapsed"}`}>
               <section className="panel import-card">
                 <div className="dropzone" onClick={() => fileRef.current?.click()}>
                   <input ref={fileRef} type="file" accept=".csv,.tsv,.json,.txt,.pdf,application/pdf" onChange={handleFile} />
@@ -1598,8 +1599,9 @@ export default function Home() {
                 )}
               </section>
 
-              <aside className="import-guide">
-                <span className="section-kicker">FORMAT GUIDE</span>
+              <aside className={`import-guide ${importGuideOpen ? "open" : "collapsed"}`}>
+                <button className="import-guide-toggle" onClick={() => setImportGuideOpen((open) => !open)} aria-expanded={importGuideOpen}><span>Format guide</span><ChevronDown size={17} /></button>
+                {importGuideOpen && <div className="import-guide-content"><span className="section-kicker">FORMAT GUIDE</span>
                 <h3>Required columns</h3>
                 <div className="field-list">
                   {["PDF batch — choose NP + subject after extraction", "CSV: np — NP1, NP2, NP3, NP4, or NP5", "subject and topic", "question", "option_a, option_b, option_c, option_d", "answer — A, B, C, or D"].map((field) => <div key={field}><Check size={15} /><span>{field}</span></div>)}
@@ -1609,7 +1611,8 @@ export default function Home() {
                   {["situation", "rationale_a through rationale_d", "rationale — for the correct answer"].map((field) => <div key={field}><Plus size={15} /><span>{field}</span></div>)}
                 </div>
                 <div className="guide-tip"><Sparkles size={18} /><p><strong>Best review experience</strong><br />Include a rationale for every choice so you learn why distractors are wrong—not only which letter is correct.</p></div>
-                <div className="bank-summary"><span>Current bank</span><strong>{questions.length}</strong><small>{sampleQuestions.length} sample · {imported.length} imported</small></div>
+                <div className="bank-summary"><span>Current bank</span><strong>{questions.length}</strong><small>{imported.length} imported</small></div>
+                </div>}
               </aside>
             </div>
           </div>
