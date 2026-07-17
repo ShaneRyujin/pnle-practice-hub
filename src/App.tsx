@@ -80,7 +80,7 @@ const ANNOTATION_COLORS: Record<AnnotationColor, { label: string; ink: string; h
   green: { label: "Green", ink: "#328d6d", highlight: "rgba(101, 191, 145, .46)" },
 };
 
-const sampleQuestions: Question[] = [
+const sampleQuestions: Question[] = []; /* Built-in samples intentionally disabled: each student builds this bank from their own uploads.
   {
     id: "sample-np1-001",
     np: "NP1",
@@ -403,7 +403,7 @@ const sampleQuestions: Question[] = [
     },
     source: "sample",
   },
-];
+]; */
 
 const previewScores: Record<Practice, number> = {
   NP1: 82,
@@ -1408,7 +1408,7 @@ export default function Home() {
                       const choiceButton = (
                         <button
                           className={`exam-choice ${isSelected ? "selected" : ""} ${isEliminated ? "eliminated" : ""} ${isCorrect ? "correct" : ""} ${isWrong ? "wrong" : ""}`}
-                          onClick={() => !revealed && !examTool && !isEliminated && setSelected(letter)}
+                          onClick={() => !revealed && !isEliminated && setSelected(letter)}
                           role="radio"
                           aria-checked={isSelected}
                           aria-label={`${letter}. ${currentQuestion.choices[letter]}${isEliminated ? ", eliminated" : ""}`}
