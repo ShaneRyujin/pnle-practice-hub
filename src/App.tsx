@@ -49,7 +49,7 @@ type Confidence = "sure" | "unsure" | "guessing" | null;
 type Point = { x: number; y: number };
 type MarkPath = { id: string; tool: "pen" | "highlight"; kind: Exclude<PenMode, "erase">; color: AnnotationColor; d: string; start: Point; end: Point };
 type TextPenMark = { id: string; mode: Exclude<PenMode, "draw" | "erase">; color: AnnotationColor; start: number; end: number };
-type PdfCandidate = Omit<Question, "id" | "np" | "subject" | "source"> & { id: string; answerDetected: boolean; sourcePage?: number };
+type PdfCandidate = Omit<Question, "id" | "np" | "subject" | "source"> & { id: string; answerDetected: boolean; sourcePage?: number; questionNumber?: number };
 
 type Question = {
   id: string;
@@ -567,6 +567,19 @@ function pdfCandidateIssue(candidate: PdfCandidate): string | null {
   return null;
 }
 
+function extractPdfSituations(text: string) {
+  const headings = [...text.matchAll(/\bSITUATION\s+(\d{1,3})\s*[-–:]?\s*/gi)];
+  const situations = new Map<number, string>();
+  headings.forEach((heading, index) => {
+    const start = (heading.index || 0) + heading[0].length;
+    const untilNextHeading = text.slice(start, headings[index + 1]?.index || text.length);
+    const firstQuestion = untilNextHeading.search(/\n\s*\d{1,3}\.\s+/);
+    const content = (firstQuestion >= 0 ? untilNextHeading.slice(0, firstQuestion) : untilNextHeading).replace(/\s+/g, " ").trim();
+    if (content) situations.set(Number(heading[1]), content);
+  });
+  return situations;
+}
+
 function formatSataText(text: string) {
   if (!/\b(?:select\s+all\s+that\s+apply|select\s+all|sata)\b/i.test(text)) return text;
   return text.replace(/\s+(?=(?:\(?\d{1,2}[.)])\s)/g, "\n").replace(/\n{2,}/g, "\n").trim();
@@ -574,7 +587,8 @@ function formatSataText(text: string) {
 
 function parsePdfCandidates(text: string): PdfCandidate[] {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
-  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*\d{1,3}\.\s+|$)/g)];
+  const situationBlocks = extractPdfSituations(normalized);
+  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*(?:\d{1,3}\.\s+|SITUATION\s+\d{1,3}\s*[-–:]?)|$)/gi)];
   let latestSituation = "";
   const candidates: Array<PdfCandidate | null> = matches.map((match, index) => {
     const block = match[0];
@@ -592,9 +606,12 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     const correct = (explicit?.[1]?.toUpperCase() || "A") as Letter;
     const rationales = {} as Partial<Record<Letter, string>>;
     [...feedback.matchAll(/\b([A-D])\.\s*([\s\S]*?)(?=\s+[A-D]\.|$)/gi)].forEach((note) => { rationales[note[1].toUpperCase() as Letter] = note[2].replace(/\s+/g, " ").trim(); });
-    return { id: `pdf-${index}`, situation: latestSituation || undefined, stem, choices, correct, rationales, topic: "", answerDetected: Boolean(explicit) };
+    return { id: `pdf-${index}`, questionNumber: Number(match[1]), situation: latestSituation || undefined, stem, choices, correct, rationales, topic: "", answerDetected: Boolean(explicit) };
   });
-  return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter])));
+  return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter]))).map((item, index) => ({
+    ...item,
+    situation: item.situation || situationBlocks.get(Math.ceil((item.questionNumber || index + 1) / 5)) || undefined,
+  }));
 }
 
 function scoreTone(score: number) {
