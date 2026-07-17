@@ -23,7 +23,7 @@ export default {
       return Response.json({ error: "The AI service is not configured yet." }, { status: 500 });
     }
 
-    const prompt = `You are creating a PNLE practice-bank rationale. Write one concise but clinically useful rationale for choice ${letter} only.
+    const prompt = `You are creating a PNLE practice-bank rationale. Write a clinically useful PNLE practice-bank rationale for choice ${letter} only.
 
 Situation: ${situation || "None"}
 Question: ${stem}
@@ -41,8 +41,9 @@ Requirements:
 - Use the question's nursing priority, safety, assessment, or clinical reasoning when relevant.
 - Preserve useful facts from the extracted source rationale, but correct unclear wording.
 - Do not invent patient-specific facts or cite unverified guidelines.
-- Keep it to 2–4 sentences, educational and exam-focused.
-- Return only the rationale text, with no heading or letter label.`;
+- Write 3–5 complete, connected sentences. Explain the exam-taking logic, then directly compare this choice with the priority in the stem.
+- Never leave a sentence unfinished. The final sentence must end with a period.
+- Return only the rationale text, with no heading, letter label, or bullet points.`;
 
     try {
       const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
@@ -50,7 +51,10 @@ Requirements:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.25, maxOutputTokens: 320 },
+          generationConfig: {
+            maxOutputTokens: 800,
+            thinkingConfig: { thinkingLevel: "low" },
+          },
         }),
       });
       const data = await result.json();
