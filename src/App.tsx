@@ -40,7 +40,7 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 type Practice = "NP1" | "NP2" | "NP3" | "NP4" | "NP5";
 type Letter = "A" | "B" | "C" | "D";
-type View = "dashboard" | "practice" | "bank" | "import";
+type View = "dashboard" | "practice" | "bank" | "vault" | "import";
 type AnnotationColor = "yellow" | "red" | "blue" | "green";
 type PenMode = "draw" | "underline" | "circle" | "box" | "strike" | "scribble" | "erase";
 type ExamTool = "highlight" | "pen" | null;
@@ -535,14 +535,35 @@ function suggestPdfCategory(text: string): { np: Practice; subject: string; topi
   return { np: "NP3", subject: "Medical-Surgical Nursing", topic: "Medical-Surgical Nursing" };
 }
 
+function textContentToPdfLines(items: unknown[]): string {
+  type PositionedItem = { str: string; x: number; y: number };
+  const positioned = items.flatMap((item): PositionedItem[] => {
+    if (!item || typeof item !== "object" || !("str" in item) || typeof item.str !== "string" || !item.str.trim()) return [];
+    const transform = "transform" in item && Array.isArray(item.transform) ? item.transform : [];
+    return [{ str: item.str.trim(), x: Number(transform[4]) || 0, y: Number(transform[5]) || 0 }];
+  });
+  if (!positioned.length) return "";
+  const xs = positioned.map((item) => item.x);
+  const splitAt = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const columns = Math.max(...xs) - Math.min(...xs) > 260 ? [positioned.filter((item) => item.x < splitAt), positioned.filter((item) => item.x >= splitAt)] : [positioned];
+  return columns.map((column) => {
+    const lines = new Map<number, PositionedItem[]>();
+    column.forEach((item) => {
+      const key = Math.round(item.y / 3) * 3;
+      lines.set(key, [...(lines.get(key) || []), item]);
+    });
+    return [...lines.entries()].sort(([a], [b]) => b - a).map(([, line]) => line.sort((a, b) => a.x - b.x).map((item) => item.str).join(" ").replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+  }).filter(Boolean).join("\n\n");
+}
+
 function parsePdfCandidates(text: string): PdfCandidate[] {
-  const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n");
+  const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*\d{1,3}\.\s+|$)/g)];
   let latestSituation = "";
   const candidates: Array<PdfCandidate | null> = matches.map((match, index) => {
     const block = match[0];
     const before = normalized.slice(0, match.index);
-    const situations = [...before.matchAll(/SITUATION\s+\d+\s*[-–:]\s*([\s\S]*?)(?=\n\s*\d{1,3}\.\s+)/gi)];
+    const situations = [...before.matchAll(/(?:^|\n)\s*SITUATION\s+\d+\s*[-–:]?\s*([\s\S]*?)(?=\n\s*\d{1,3}\.\s+)/gi)];
     if (situations.length) latestSituation = situations[situations.length - 1][1].replace(/\s+/g, " ").trim();
     const optionMatches = [...block.matchAll(/(?:^|\n)\s*([a-dA-D])\.\s*([\s\S]*?)(?=\n\s*[a-dA-D]\.\s*|$)/g)];
     if (optionMatches.length < 4) return null;
@@ -575,6 +596,7 @@ export default function Home() {
   const [mobileNav, setMobileNav] = useState(false);
   const [imported, setImported] = useState<Question[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [vaultIds, setVaultIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [selected, setSelected] = useState<Letter | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -620,11 +642,13 @@ export default function Home() {
     try {
       const savedQuestions = JSON.parse(localStorage.getItem("pnle-imported-questions") || "[]");
       const savedAttempts = JSON.parse(localStorage.getItem("pnle-attempts") || "[]");
+      const savedVault = JSON.parse(localStorage.getItem("pnle-vault") || "[]");
       const savedFlags = JSON.parse(localStorage.getItem("pnle-flagged") || "[]");
       const savedScratch = JSON.parse(localStorage.getItem("pnle-scratch-notes") || "{}");
       const savedScratchMarks = JSON.parse(localStorage.getItem("pnle-scratch-marks") || "{}");
       if (Array.isArray(savedQuestions)) setImported(savedQuestions);
       if (Array.isArray(savedAttempts)) setAttempts(savedAttempts);
+      if (Array.isArray(savedVault)) setVaultIds(savedVault);
       if (Array.isArray(savedFlags)) setFlagged(savedFlags);
       if (savedScratch && typeof savedScratch === "object") setScratchNotes(savedScratch);
       if (savedScratchMarks && typeof savedScratchMarks === "object") setScratchMarks(savedScratchMarks);
@@ -697,6 +721,9 @@ export default function Home() {
   const accuracy = attempts.length
     ? clampScore((attempts.filter((attempt) => attempt.correct).length / attempts.length) * 100)
     : 0;
+  const vaultQuestions = useMemo(() => vaultIds.map((id) => questionById.get(id)).filter((question): question is Question => Boolean(question)), [vaultIds, questionById]);
+  const strongestTopic = hasPerformance && topicStats.length ? [...topicStats].sort((a, b) => b.score - a.score || b.attempts - a.attempts)[0] : null;
+  const focusTopic = hasPerformance && topicStats.length ? topicStats[0] : null;
 
   const bankQuestions = useMemo(() => {
     const query = bankQuery.toLowerCase().trim();
@@ -737,7 +764,18 @@ export default function Home() {
     const nextAttempts = [attempt, ...attempts];
     setAttempts(nextAttempts);
     localStorage.setItem("pnle-attempts", JSON.stringify(nextAttempts));
+    if (!attempt.correct && !vaultIds.includes(currentQuestion.id)) {
+      const nextVault = [currentQuestion.id, ...vaultIds];
+      setVaultIds(nextVault);
+      localStorage.setItem("pnle-vault", JSON.stringify(nextVault));
+    }
     setRevealed(true);
+  }
+
+  function removeFromVault(id: string) {
+    const nextVault = vaultIds.filter((questionId) => questionId !== id);
+    setVaultIds(nextVault);
+    localStorage.setItem("pnle-vault", JSON.stringify(nextVault));
   }
 
   function toggleEliminated(letter: Letter) {
@@ -1010,7 +1048,7 @@ export default function Home() {
         const pages: string[] = [];
         for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
           const content = await (await document.getPage(pageNumber)).getTextContent();
-          pages.push(content.items.map((item) => "str" in item ? item.str : "").join("\n"));
+          pages.push(textContentToPdfLines(content.items));
         }
         const extracted = pages.join("\n");
         const candidates = parsePdfCandidates(extracted);
@@ -1103,6 +1141,7 @@ export default function Home() {
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
     { id: "practice", label: "Practice", icon: ClipboardCheck },
     { id: "bank", label: "Question bank", icon: BookOpen },
+    { id: "vault", label: "The Vault", icon: BookOpen },
     { id: "import", label: "Import questions", icon: FileUp },
   ];
 
@@ -1125,6 +1164,7 @@ export default function Home() {
                 <Icon size={18} />
                 <span>{item.label}</span>
                 {item.id === "bank" && <small>{questions.length}</small>}
+                {item.id === "vault" && vaultQuestions.length > 0 && <small>{vaultQuestions.length}</small>}
               </button>
             );
           })}
@@ -1157,7 +1197,7 @@ export default function Home() {
           <button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={21} /></button>
           <div>
             <span className="eyebrow">BOARD REVIEW WORKSPACE</span>
-            <h1>{view === "dashboard" ? "Good evening, Nena." : view === "practice" ? "Practice session" : view === "bank" ? "Question bank" : "Import questions"}</h1>
+            <h1>{view === "dashboard" ? "Good evening, Nena." : view === "practice" ? "Practice session" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
           </div>
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
@@ -1243,9 +1283,20 @@ export default function Home() {
               </section>
             </div>
 
+            <section className="weekly-panel panel">
+              <div className="panel-heading"><div><span className="section-kicker">THIS WEEK</span><h3>Your study snapshot</h3></div><span className="subtle-label">Last 7 days</span></div>
+              <div className="weekly-stats"><div><strong>{attempts.length}</strong><span>questions answered</span></div><div><strong>{attempts.length ? `${accuracy}%` : "—"}</strong><span>average score</span></div><button onClick={() => navigate("vault")}><strong>{vaultQuestions.length}</strong><span>in The Vault</span></button></div>
+              <div className="weekly-focus"><div><span className="focus-dot strong" /><p><small>Strongest area</small><strong>{strongestTopic?.topic || "Build your first strength"}</strong></p></div><div><span className="focus-dot focus" /><p><small>Focus area</small><strong>{focusTopic?.topic || "Answer a few questions to spot it"}</strong></p></div></div>
+            </section>
+
             <section className="bottom-cta">
               <div><span className="cta-icon"><Upload size={20} /></span><div><strong>Bring your own review sets</strong><p>Import CSV, TSV, or JSON questions and label every item by NP, subject, and topic.</p></div></div>
               <button className="secondary-button" onClick={() => navigate("import")}><Plus size={17} /> Add questions</button>
+            </section>
+
+            <section className="dashboard-bank panel">
+              <div className="panel-heading"><div><span className="section-kicker">QUESTION BANK</span><h3>Keep your material organized</h3></div><button className="text-button" onClick={() => navigate("bank")}>Open question bank <ArrowRight size={15} /></button></div>
+              <div className="dashboard-bank-list">{questions.slice(0, 4).map((question) => <button key={question.id} onClick={() => startPractice(question.np)}><span>{question.np}</span><p>{question.stem}</p><small>{question.subject}</small></button>)}</div>
             </section>
           </div>
         )}
@@ -1310,9 +1361,14 @@ export default function Home() {
                 </button>
 
                 <div className={`exam-annotatable ${examTool ? `tool-${examTool}` : ""}`}>
+                  {currentQuestion.situation && (
+                    <section className="exam-situation-box">
+                      <div className="exam-classification"><span>Situation</span><i>·</i><span>{currentQuestion.np}</span><small>{currentQuestion.topic}</small></div>
+                      <p>{renderHighlightText(currentQuestion.situation, "situation")}</p>
+                    </section>
+                  )}
                   <div className="exam-question-box">
                     <div className="exam-classification"><span>{currentQuestion.np}</span><i>·</i><span>{currentQuestion.topic}</span><small>{currentQuestion.source === "sample" ? "SAMPLE BANK" : "IMPORTED"}</small></div>
-                    {currentQuestion.situation && <p className="exam-situation">{renderHighlightText(currentQuestion.situation, "situation")}</p>}
                     <h2>{renderHighlightText(currentQuestion.stem, "question")}</h2>
                   </div>
 
@@ -1439,6 +1495,13 @@ export default function Home() {
           </div>
         )}
 
+        {view === "vault" && (
+          <div className="page-content bank-page vault-page">
+            <div className="page-intro"><div><span className="section-kicker">REVIEW WHAT YOU MISSED</span><h2>The Vault</h2><p>Questions go here when your first answer is incorrect. Keep them for review, or remove them when you feel ready.</p></div><button className="primary-button" onClick={() => startPractice()}><ClipboardCheck size={17} /> Practice mixed set</button></div>
+            {vaultQuestions.length ? <div className="bank-list vault-list"><div className="bank-list-head"><span>Question</span><span>Classification</span><span>Source</span><span /></div>{vaultQuestions.map((question, index) => <article key={question.id} className="bank-row"><div className="bank-question"><span>{String(index + 1).padStart(2, "0")}</span><p>{question.stem}</p></div><div className="bank-class"><strong>{question.np} · {question.subject}</strong><small>{question.topic}</small></div><span className="source-label imported">Vault</span><div className="bank-actions"><button onClick={() => { setPracticeNp(question.np); setPracticeSubject(question.subject); setQuestionIndex(0); setSelected(null); setRevealed(false); navigate("practice"); }} aria-label="Practice this question"><ArrowRight size={17} /></button><button className="danger" onClick={() => removeFromVault(question.id)} aria-label="Remove from The Vault"><Trash2 size={16} /></button></div></article>)}</div> : <div className="empty-state"><BookOpen size={28} /><h2>Your Vault is clear</h2><p>Missed questions will be saved here automatically so you can revisit them later.</p><button className="primary-button" onClick={() => startPractice()}>Practice now</button></div>}
+          </div>
+        )}
+
         {view === "import" && (
           <div className="page-content import-page">
             <div className="page-intro">
@@ -1472,7 +1535,7 @@ export default function Home() {
                     </div>
                     <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDF’s wording: <strong>{batchNp} · {batchSubject}</strong>. You can change this for the entire batch.</span></div>
                     <div className="pdf-candidate-list">
-                      {pdfCandidates.slice(0, 8).map((candidate, index) => <article className="pdf-candidate" key={candidate.id}><div><strong>Q{index + 1}</strong><p>{candidate.stem}</p><small>{candidate.situation ? "Situation found" : "No situation heading found"} · {candidate.answerDetected ? "Answer detected" : "Confirm answer"}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>)}
+                      {pdfCandidates.slice(0, 8).map((candidate, index) => <article className="pdf-candidate" key={candidate.id}><div><strong>Q{index + 1}</strong>{candidate.situation && <div className="pdf-source-situation"><span>Situation</span><p>{candidate.situation}</p></div>}<p>{candidate.stem}</p><div className="pdf-choice-preview">{LETTERS.map((letter) => <span key={letter}><b>{letter}.</b> {candidate.choices[letter]}</span>)}</div><small>{candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · {candidate.answerDetected ? "Answer detected" : "Confirm answer"}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>)}
                       {pdfCandidates.length > 8 && <p className="more-pdf-items">+ {pdfCandidates.length - 8} more extracted questions will be imported with these labels.</p>}
                     </div>
                     <button className="primary-button import-button" onClick={importPdfBatch}><Upload size={17} /> Add reviewed PDF batch</button>
