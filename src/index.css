@@ -15,6 +15,10 @@
   --red: #c95f55;
 }
 
+:root[data-theme="dark"] { --ink: #e5efec; --muted: #aebfba; --line: #355047; --paper: #17251f; --canvas: #0e1815; --navy: #143f3c; --teal: #42a998; --teal-dark: #9dd9cc; --mint: #25473e; --lime: #c9e86f; }
+.dark-mode { color-scheme: dark; }
+.dark-mode .sidebar { background: #101d18; }.dark-mode .topbar { background: rgba(14,24,21,.92); }.dark-mode .panel, .dark-mode .exam-question-box, .dark-mode .exam-situation-box, .dark-mode .pdf-candidate, .dark-mode .pdf-choice-rationale, .dark-mode .bank-row, .dark-mode .scratch-bottom-panel { background: #17251f; border-color: var(--line); }.dark-mode .sidebar, .dark-mode .main-nav button, .dark-mode .np-shortcut, .dark-mode .sidebar-bank-link, .dark-mode .streak-pill, .dark-mode .bank-question p, .dark-mode .pdf-edit-field textarea, .dark-mode .batch-fields select, .dark-mode .batch-fields input, .dark-mode .pdf-candidate select { color: var(--ink); }.dark-mode .main-nav button:hover, .dark-mode .np-shortcut:hover, .dark-mode .sidebar-bank-link:hover, .dark-mode .mini-progress, .dark-mode .streak-pill, .dark-mode .icon-button { background: #20332c; }.dark-mode .pdf-edit-field textarea, .dark-mode .batch-fields select, .dark-mode .batch-fields input, .dark-mode .pdf-candidate select, .dark-mode .exam-choice, .dark-mode .scratch-surface { background: #102019; border-color: #3a544a; color: var(--ink); }.dark-mode .exam-question-box h2, .dark-mode .exam-situation-box p { color: #edf5f1; }.dark-mode .pdf-review { background: #13231d; border-color: #35584b; }
+
 .pdf-review-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
 .batch-ai-button { min-height: 30px; padding: 0 10px; border: 1px solid #1d786f; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px; background: var(--teal); color: white; cursor: pointer; font-size: 9px; font-weight: 850; white-space: nowrap; }
 .batch-ai-button:disabled { opacity: .7; cursor: wait; }
@@ -71,6 +75,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .streak-pill { height: 35px; padding: 0 13px; display: flex; align-items: center; gap: 7px; border: 1px solid #e0e5df; border-radius: 18px; background: #fafbf8; color: #66737a; font-size: 11px; font-weight: 700; }
 .streak-pill svg { color: var(--coral); fill: #f9c7b6; }
+.theme-toggle { width: 35px; height: 35px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; background: var(--paper); color: var(--teal-dark); cursor: pointer; }
 .avatar { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--navy); color: white; font-weight: 800; cursor: pointer; }
 .icon-button { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; display: grid; place-items: center; background: white; cursor: pointer; }
 .menu-button, .mobile-only { display: none; }
