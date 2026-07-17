@@ -948,11 +948,19 @@ export default function Home() {
       const penMark = [...currentTextPenMarks].reverse().find((mark) => position >= Math.min(mark.start, mark.end) && position <= Math.max(mark.start, mark.end));
       const penStart = penMark && position === Math.min(penMark.start, penMark.end);
       const penEnd = penMark && position === Math.max(penMark.start, penMark.end);
+      const markStart = penMark ? Math.min(penMark.start, penMark.end) : 0;
+      const wordOffset = penMark ? Math.round((position - markStart) / 2) : 0;
+      const isSegmentedMark = penMark?.mode === "circle" || penMark?.mode === "box";
+      const penSegmentStart = isSegmentedMark && (Boolean(penStart) || wordOffset % 3 === 0);
+      const penSegmentEnd = isSegmentedMark && (Boolean(penEnd) || wordOffset % 3 === 2);
+      const segment = Math.floor(wordOffset / 3);
+      const penTilt = [-0.55, 0.35, -0.2, 0.48][segment % 4];
+      const penLift = [-0.3, 0.2, 0, -0.15][segment % 4];
       return (
         <span
           key={tokenId}
-          className={`highlight-token ${color ? "is-highlighted" : ""} ${examTool === "highlight" ? "is-editable" : ""} ${penMark ? `text-pen pen-${penMark.mode} ${penStart ? "pen-start" : ""} ${penEnd ? "pen-end" : ""}` : ""} ${examTool === "pen" ? "is-pen-editable" : ""}`}
-          style={{ ...(color ? { backgroundColor: ANNOTATION_COLORS[color].highlight } : {}), ...(penMark ? { "--pen-ink": ANNOTATION_COLORS[penMark.color].ink } : {}) } as CSSProperties}
+          className={`highlight-token ${color ? "is-highlighted" : ""} ${examTool === "highlight" ? "is-editable" : ""} ${penMark ? `text-pen pen-${penMark.mode} ${penStart ? "pen-start" : ""} ${penEnd ? "pen-end" : ""} ${penSegmentStart ? "pen-segment-start" : ""} ${penSegmentEnd ? "pen-segment-end" : ""}` : ""} ${examTool === "pen" ? "is-pen-editable" : ""}`}
+          style={{ ...(color ? { backgroundColor: ANNOTATION_COLORS[color].highlight } : {}), ...(penMark ? { "--pen-ink": ANNOTATION_COLORS[penMark.color].ink, "--pen-tilt": `${penTilt}deg`, "--pen-lift": `${penLift}px` } : {}) } as CSSProperties}
           onPointerDown={(event) => beginTextPen(event, position)}
           onPointerEnter={(event) => extendTextPen(event, position)}
           onPointerUp={() => { activeTextPenRef.current = null; }}
