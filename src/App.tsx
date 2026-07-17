@@ -630,7 +630,6 @@ export default function Home() {
   const [scratchTool, setScratchTool] = useState<"pen" | "highlight" | "erase">("pen");
   const [scratchColor, setScratchColor] = useState<AnnotationColor>("blue");
   const [scratchOpen, setScratchOpen] = useState(false);
-  const [showExamTip, setShowExamTip] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const markingLayerRef = useRef<SVGSVGElement>(null);
   const scratchLayerRef = useRef<SVGSVGElement>(null);
@@ -679,6 +678,7 @@ export default function Home() {
     [practiceNp, practiceSubject, questions],
   );
   const currentQuestion = filteredPractice[questionIndex % Math.max(filteredPractice.length, 1)];
+  const currentQuestionPosition = questionIndex % Math.max(filteredPractice.length, 1);
   const currentEliminated = currentQuestion ? eliminated[currentQuestion.id] || [] : [];
   const currentMarkings = currentQuestion ? markings[currentQuestion.id] || [] : [];
   const currentHighlights = currentQuestion ? highlighted[currentQuestion.id] || {} : {};
@@ -1026,6 +1026,7 @@ export default function Home() {
   }
 
   function previousQuestion() {
+    if (questionIndex <= 0) return;
     setQuestionIndex((index) => (index - 1 + Math.max(filteredPractice.length, 1)) % Math.max(filteredPractice.length, 1));
     setSelected(null);
     setRevealed(false);
@@ -1374,14 +1375,6 @@ export default function Home() {
                   <button className="clear-marks" onClick={clearMarks} disabled={!currentMarkings.length && !currentTextPenMarks.length && !Object.keys(currentHighlights).length} title="Clear pen and highlighter marks"><Eraser size={16} /><span>Clear marks</span></button>
                 </div>
 
-                {showExamTip && (
-                  <div className="exam-tip">
-                    <PenTool size={16} />
-                    <p><strong>Use exam strategy tools:</strong> choose a highlighter color then click text. With the pen on, click a word to mark it or drag across words to extend the same underline, circle, box, strike, or scribble.</p>
-                    <button onClick={() => setShowExamTip(false)} aria-label="Dismiss exam strategy tip"><X size={16} /></button>
-                  </div>
-                )}
-
                 <button className={`flag-button ${flagged.includes(currentQuestion.id) ? "flagged" : ""}`} onClick={toggleFlag}>
                   <Flag size={15} fill={flagged.includes(currentQuestion.id) ? "currentColor" : "none"} />
                   {flagged.includes(currentQuestion.id) ? "Flagged for review" : "Flag for review"}
@@ -1446,7 +1439,7 @@ export default function Home() {
                 </div>
 
                 <div className="exam-footer">
-                  <button className="icon-text-button" onClick={previousQuestion}><ArrowLeft size={17} /> Previous</button>
+                  {currentQuestionPosition > 0 ? <button className="icon-text-button" onClick={previousQuestion}><ArrowLeft size={17} /> Previous</button> : <span />}
                   {!revealed ? <button className="primary-button" disabled={!selected} onClick={checkAnswer}>Submit answer <Check size={17} /></button> : <button className="primary-button" onClick={nextQuestion}>Next question <ArrowRight size={17} /></button>}
                 </div>
 
