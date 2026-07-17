@@ -620,6 +620,7 @@ export default function Home() {
   const [importText, setImportText] = useState("");
   const [importMessage, setImportMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [importGuideOpen, setImportGuideOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState<string | null>(null);
   const [pdfCandidates, setPdfCandidates] = useState<PdfCandidate[]>([]);
   const [batchNp, setBatchNp] = useState<Practice>("NP1");
   const [batchSubject, setBatchSubject] = useState("Community Health Nursing");
@@ -1164,6 +1165,36 @@ export default function Home() {
     setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, rationales: { ...item.rationales, [letter]: value } } : item));
   }
 
+  async function generatePdfRationale(index: number, letter: Letter) {
+    const candidate = pdfCandidates[index];
+    if (!candidate) return;
+    const requestId = `${index}-${letter}`;
+    setAiGenerating(requestId);
+    setImportMessage(null);
+    try {
+      const result = await fetch("/api/generate-rationale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          situation: candidate.situation,
+          stem: candidate.stem,
+          choices: candidate.choices,
+          correct: candidate.correct,
+          letter,
+          extractedRationale: candidate.rationales[letter] || "",
+        }),
+      });
+      const data = await result.json() as { rationale?: string; error?: string };
+      if (!result.ok || !data.rationale) throw new Error(data.error || "AI rationale generation failed.");
+      updatePdfRationale(index, letter, data.rationale);
+      setImportMessage({ type: "success", text: `AI rationale created for choice ${letter}. Review it before importing.` });
+    } catch (error) {
+      setImportMessage({ type: "error", text: error instanceof Error ? error.message : "AI rationale generation failed." });
+    } finally {
+      setAiGenerating(null);
+    }
+  }
+
   function deleteImported(id: string) {
     const nextImported = imported.filter((question) => question.id !== id);
     const nextAttempts = attempts.filter((attempt) => attempt.questionId !== id);
@@ -1617,7 +1648,7 @@ export default function Home() {
                     <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDF’s wording: <strong>{batchNp} · {batchSubject}</strong>. You can change this for the entire batch.</span></div>
                     {pdfIssues.length > 0 && <div className="pdf-issue-jump"><XCircle size={17} /><div><strong>{pdfIssues.length} item{pdfIssues.length === 1 ? " needs" : "s need"} review</strong><span>Fix the highlighted questions before importing.</span></div><nav>{pdfIssues.map(({ index }) => <a key={index} href={`#pdf-candidate-${index + 1}`}>Q{index + 1}</a>)}</nav></div>}
                     <div className="pdf-candidate-list">
-                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill rationale</button></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
+                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><div className="rationale-actions"><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill template</button><button type="button" className="generate-rationale-button" disabled={aiGenerating === `${index}-${letter}`} onClick={() => generatePdfRationale(index, letter)}><Sparkles size={12} /> {aiGenerating === `${index}-${letter}` ? "Generating…" : "Generate with AI"}</button></div></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
                     </div>
                     <button className="primary-button import-button" disabled={pdfIssues.length > 0} onClick={importPdfBatch}><Upload size={17} /> {pdfIssues.length ? "Fix flagged questions to import" : "Add reviewed PDF batch"}</button>
                   </section>
