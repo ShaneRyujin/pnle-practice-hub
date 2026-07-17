@@ -1172,7 +1172,7 @@ export default function Home() {
     setAiGenerating(requestId);
     setImportMessage(null);
     try {
-      const result = await fetch("/api/generate-rationale", {
+      const result = await fetch("/api/ai-rationale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
