@@ -217,12 +217,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .text-pen.pen-underline::after, .text-pen.pen-strike::after { content: ""; position: absolute; left: -1px; right: -1px; height: 2.5px; border-radius: 70% 40% 65% 35%; background: var(--pen-ink); opacity: .87; }
 .text-pen.pen-underline::after { bottom: -2px; transform: rotate(-.55deg); }.text-pen.pen-strike::after { top: 53%; transform: rotate(.4deg); }
 .text-pen.pen-scribble { text-decoration-line: underline; text-decoration-style: wavy; text-decoration-thickness: 2.5px; text-decoration-color: var(--pen-ink); text-underline-offset: 3px; }
-.text-pen.pen-circle, .text-pen.pen-box { border-top: 2px solid var(--pen-ink); border-bottom: 2.5px solid var(--pen-ink); }
-.text-pen.pen-circle { transform: rotate(-.35deg); }.text-pen.pen-box { transform: rotate(.2deg); }
-.text-pen.pen-circle.pen-start, .text-pen.pen-box.pen-start { border-left: 2px solid var(--pen-ink); }
-.text-pen.pen-circle.pen-end, .text-pen.pen-box.pen-end { border-right: 2.5px solid var(--pen-ink); }
-.text-pen.pen-circle.pen-start { border-radius: 48% 0 0 57%; }.text-pen.pen-circle.pen-end { border-radius: 0 54% 48% 0; }
-.text-pen.pen-circle.pen-start.pen-end { border-radius: 48% 53% 47% 52%; }.text-pen.pen-box.pen-start { border-radius: 4px 1px 1px 3px; }.text-pen.pen-box.pen-end { border-radius: 1px 4px 3px 1px; }.text-pen.pen-box.pen-start.pen-end { border-radius: 4px 2px 3px 2px; }
+.text-pen.pen-circle, .text-pen.pen-box { margin-right: -1px; border-top: 2px solid var(--pen-ink); border-bottom: 2.5px solid var(--pen-ink); transform: translateY(var(--pen-lift, 0)) rotate(var(--pen-tilt, -.2deg)); }
+.text-pen.pen-circle.pen-segment-start, .text-pen.pen-box.pen-segment-start { border-left: 2px solid var(--pen-ink); }
+.text-pen.pen-circle.pen-segment-end, .text-pen.pen-box.pen-segment-end { border-right: 2.5px solid var(--pen-ink); }
+.text-pen.pen-circle.pen-segment-start { border-radius: 48% 0 0 57%; }.text-pen.pen-circle.pen-segment-end { border-radius: 0 54% 48% 0; }
+.text-pen.pen-circle.pen-segment-start.pen-segment-end { border-radius: 48% 53% 47% 52%; }.text-pen.pen-box.pen-segment-start { border-radius: 4px 1px 1px 3px; }.text-pen.pen-box.pen-segment-end { border-radius: 1px 4px 3px 1px; }.text-pen.pen-box.pen-segment-start.pen-segment-end { border-radius: 4px 2px 3px 2px; }
 .marking-layer { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none; overflow: visible; touch-action: none; }
 .mark-path { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; opacity: .93; }.mark-path.underline { stroke-width: 3; }.mark-path.scribble { stroke-width: 4; }
 .exam-keyboard-tip { margin-top: 13px; color: #a39e95; font-size: 9px; }.exam-keyboard-tip kbd { padding: 1px 4px; border: 1px solid #d7d7d1; border-radius: 4px; background: white; color: #6a746f; font-family: ui-monospace, monospace; }
