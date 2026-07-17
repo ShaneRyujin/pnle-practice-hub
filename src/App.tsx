@@ -567,6 +567,11 @@ function pdfCandidateIssue(candidate: PdfCandidate): string | null {
   return null;
 }
 
+function formatSataText(text: string) {
+  if (!/\b(?:select\s+all\s+that\s+apply|select\s+all|sata)\b/i.test(text)) return text;
+  return text.replace(/\s+(?=(?:\(?\d{1,2}[.)])\s)/g, "\n").replace(/\n{2,}/g, "\n").trim();
+}
+
 function parsePdfCandidates(text: string): PdfCandidate[] {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*\d{1,3}\.\s+|$)/g)];
@@ -579,7 +584,7 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     const optionMatches = [...block.matchAll(/(?:^|\n)\s*([a-dA-D])\.\s*([\s\S]*?)(?=\n\s*[a-dA-D]\.\s*|$)/g)];
     if (optionMatches.length < 4) return null;
     const firstOption = optionMatches[0].index ?? block.length;
-    const stem = block.slice(0, firstOption).replace(/^\s*\d{1,3}\.\s*/, "").replace(/\s+/g, " ").trim();
+    const stem = formatSataText(block.slice(0, firstOption).replace(/^\s*\d{1,3}\.\s*/, "").replace(/\s+/g, " ").trim());
     const choices = {} as Record<Letter, string>;
     optionMatches.slice(0, 4).forEach((option) => { choices[option[1].toUpperCase() as Letter] = option[2].replace(/\s+/g, " ").trim(); });
     const feedback = optionMatches.slice(4).map((option) => `${option[1]}. ${option[2]}`).join(" ");
@@ -1476,7 +1481,7 @@ export default function Home() {
                   )}
                   <div className="exam-question-box">
                     <div className="exam-classification"><span>{currentQuestion.np}</span><i>·</i><span>{currentQuestion.topic}</span><small>{currentQuestion.source === "sample" ? "SAMPLE BANK" : "IMPORTED"}</small></div>
-                    <h2>{renderHighlightText(currentQuestion.stem, "question")}</h2>
+                    <h2>{renderHighlightText(formatSataText(currentQuestion.stem), "question")}</h2>
                   </div>
 
                   <div className={`exam-choice-list x-${xSide}`} role="radiogroup" aria-label="Answer choices">
