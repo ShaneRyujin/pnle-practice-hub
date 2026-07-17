@@ -610,7 +610,7 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
   });
   return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter]))).map((item, index) => ({
     ...item,
-    situation: item.situation || situationBlocks.get(Math.ceil((item.questionNumber || index + 1) / 5)) || undefined,
+    situation: situationBlocks.get(Math.ceil((item.questionNumber || index + 1) / 5)) || item.situation || undefined,
   }));
 }
 
