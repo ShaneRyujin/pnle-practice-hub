@@ -556,6 +556,16 @@ function textContentToPdfLines(items: unknown[]): string {
   }).filter(Boolean).join("\n\n");
 }
 
+function pdfCandidateIssue(candidate: PdfCandidate): string | null {
+  if (!candidate.stem.trim()) return "The question text is missing.";
+  if (LETTERS.some((letter) => !candidate.choices[letter]?.trim())) return "One or more answer choices are missing.";
+  const finalChoice = candidate.choices.D;
+  if (finalChoice.length > 260 || /\b(?:difficulty|rationale|answer\s*key|explanation)\b/i.test(finalChoice) || /\bA\s+B\s+C\s+D\b/i.test(finalChoice)) {
+    return "Choice D may include answer-key or rationale text. Edit and verify it before importing.";
+  }
+  return null;
+}
+
 function parsePdfCandidates(text: string): PdfCandidate[] {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*\d{1,3}\.\s+|$)/g)];
@@ -684,6 +694,10 @@ export default function Home() {
   const currentHighlights = currentQuestion ? highlighted[currentQuestion.id] || {} : {};
   const currentTextPenMarks = currentQuestion ? textPenMarks[currentQuestion.id] || [] : [];
   const currentScratchMarks = currentQuestion ? scratchMarks[currentQuestion.id] || [] : [];
+  const pdfIssues = useMemo(() => pdfCandidates.flatMap((candidate, index) => {
+    const issue = pdfCandidateIssue(candidate);
+    return issue ? [{ index, issue }] : [];
+  }), [pdfCandidates]);
 
   const actualScores = useMemo(() => {
     const result = {} as Record<Practice, number>;
@@ -717,8 +731,8 @@ export default function Home() {
   }, [attempts, questionById]);
 
   const hasPerformance = attempts.length > 0;
-  const displayedScores = hasPerformance ? actualScores : previewScores;
-  const attentionTopics = hasPerformance && topicStats.length ? topicStats.slice(0, 3) : previewTopics;
+  const displayedScores = actualScores;
+  const attentionTopics = hasPerformance && topicStats.length ? topicStats.slice(0, 3) : [];
   const accuracy = attempts.length
     ? clampScore((attempts.filter((attempt) => attempt.correct).length / attempts.length) * 100)
     : 0;
@@ -1087,7 +1101,7 @@ export default function Home() {
   }
 
   function importPdfBatch() {
-    if (!pdfCandidates.length) return;
+    if (!pdfCandidates.length || pdfIssues.length) return;
     const batch = pdfCandidates.map((candidate, index): Question => ({
       id: `imported-pdf-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
       np: batchNp,
@@ -1106,6 +1120,14 @@ export default function Home() {
     setImportMessage({ type: "success", text: `${batch.length} PDF questions added under ${batchNp} · ${batchSubject}.` });
     setPdfCandidates([]);
     setPdfFileName("");
+  }
+
+  function updatePdfCandidate(index: number, field: "situation" | "stem" | Letter, value: string) {
+    setPdfCandidates((items) => items.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      if (field === "situation" || field === "stem") return { ...item, [field]: value };
+      return { ...item, choices: { ...item.choices, [field]: value } };
+    }));
   }
 
   function deleteImported(id: string) {
@@ -1225,7 +1247,7 @@ export default function Home() {
           <button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={21} /></button>
           <div>
             <span className="eyebrow">BOARD REVIEW WORKSPACE</span>
-            <h1>{view === "dashboard" ? "Good evening, Nena." : view === "practice" ? "Practice session" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
+            <h1>{view === "dashboard" ? "Your PNLE review space" : view === "practice" ? "Practice session" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
           </div>
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
@@ -1238,7 +1260,7 @@ export default function Home() {
             {!hasPerformance && (
               <div className="preview-notice">
                 <Sparkles size={17} />
-                <span><strong>Sample insights are on.</strong> Answer your first question to replace them with your real results.</span>
+                <span><strong>Your dashboard starts fresh.</strong> Answer your first question to build your personal progress data.</span>
                 <button onClick={() => startPractice()}>Answer one <ArrowRight size={15} /></button>
               </div>
             )}
@@ -1275,7 +1297,7 @@ export default function Home() {
               <section className="panel mastery-panel">
                 <div className="panel-heading">
                   <div><span className="section-kicker">MASTERY MAP</span><h3>Strength by Nursing Practice</h3></div>
-                  <span className="subtle-label">{hasPerformance ? "Your results" : "Sample preview"}</span>
+                  <span className="subtle-label">{hasPerformance ? "Your results" : "No practice yet"}</span>
                 </div>
                 <div className="mastery-list">
                   {PRACTICES.map((np, index) => {
@@ -1299,15 +1321,15 @@ export default function Home() {
                   <Target size={20} />
                 </div>
                 <div className="attention-list">
-                  {attentionTopics.map((item, index) => (
+                  {attentionTopics.length ? attentionTopics.map((item, index) => (
                     <button key={`${item.topic}-${index}`} onClick={() => startPractice(item.np as Practice)}>
                       <span className="attention-rank">0{index + 1}</span>
                       <span><strong>{item.topic}</strong><small>{item.np} · {item.attempts} attempts</small></span>
                       <span className={`attention-score ${scoreTone(item.score)}`}>{item.score}%</span>
                     </button>
-                  ))}
+                  )) : <div className="attention-empty">Answer questions to identify the topics that need your attention.</div>}
                 </div>
-                <button className="text-button" onClick={() => startPractice(attentionTopics[0]?.np as Practice)}>Practice weakest area <ArrowRight size={15} /></button>
+                <button className="text-button" onClick={() => startPractice(attentionTopics[0]?.np as Practice)}> {attentionTopics.length ? "Practice weakest area" : "Start practicing"} <ArrowRight size={15} /></button>
               </section>
             </div>
 
@@ -1559,11 +1581,11 @@ export default function Home() {
                       <datalist id="pdf-subjects">{subjects.map((subject) => <option key={subject} value={subject} />)}</datalist>
                     </div>
                     <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDF’s wording: <strong>{batchNp} · {batchSubject}</strong>. You can change this for the entire batch.</span></div>
+                    {pdfIssues.length > 0 && <div className="pdf-issue-jump"><XCircle size={17} /><div><strong>{pdfIssues.length} item{pdfIssues.length === 1 ? " needs" : "s need"} review</strong><span>Fix the highlighted questions before importing.</span></div><nav>{pdfIssues.map(({ index }) => <a key={index} href={`#pdf-candidate-${index + 1}`}>Q{index + 1}</a>)}</nav></div>}
                     <div className="pdf-candidate-list">
-                      {pdfCandidates.slice(0, 8).map((candidate, index) => <article className="pdf-candidate" key={candidate.id}><div><strong>Q{index + 1}</strong>{candidate.situation && <div className="pdf-source-situation"><span>Situation</span><p>{candidate.situation}</p></div>}<p>{candidate.stem}</p><div className="pdf-choice-preview">{LETTERS.map((letter) => <span key={letter}><b>{letter}.</b> {candidate.choices[letter]}</span>)}</div><small>{candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · {candidate.answerDetected ? "Answer detected" : "Confirm answer"}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>)}
-                      {pdfCandidates.length > 8 && <p className="more-pdf-items">+ {pdfCandidates.length - 8} more extracted questions will be imported with these labels.</p>}
+                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}</div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <label className="pdf-edit-field" key={letter}><span>{letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
                     </div>
-                    <button className="primary-button import-button" onClick={importPdfBatch}><Upload size={17} /> Add reviewed PDF batch</button>
+                    <button className="primary-button import-button" disabled={pdfIssues.length > 0} onClick={importPdfBatch}><Upload size={17} /> {pdfIssues.length ? "Fix flagged questions to import" : "Add reviewed PDF batch"}</button>
                   </section>
                 )}
               </section>
