@@ -19,6 +19,7 @@ import {
   Highlighter,
   LayoutDashboard,
   Menu,
+  Moon,
   NotebookPen,
   PenTool,
   Plus,
@@ -26,6 +27,7 @@ import {
   Search,
   Spline,
   Square,
+  Sun,
   Sparkles,
   Strikethrough,
   Target,
@@ -627,6 +629,7 @@ function formatDate(value: string) {
 export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [mobileNav, setMobileNav] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const [imported, setImported] = useState<Question[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [vaultIds, setVaultIds] = useState<string[]>([]);
@@ -696,6 +699,16 @@ export default function Home() {
     }
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("pnle-theme");
+    if (savedTheme === "dark") setDarkMode(true);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    localStorage.setItem("pnle-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   useEffect(() => {
     const stopTextPen = () => { activeTextPenRef.current = null; };
@@ -1351,7 +1364,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${darkMode ? "dark-mode" : ""}`}>
       <aside className={`sidebar ${mobileNav ? "is-open" : ""}`}>
         <div className="brand-row">
           <button className="brand" onClick={() => navigate("dashboard")} aria-label="Go to overview">
@@ -1410,6 +1423,7 @@ export default function Home() {
           </div>
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
+            <button className="theme-toggle" onClick={() => setDarkMode((enabled) => !enabled)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Light mode" : "Dark mode"}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}</button>
             <button className="avatar" aria-label="Profile">N</button>
           </div>
         </header>
