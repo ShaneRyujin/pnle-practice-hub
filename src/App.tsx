@@ -36,6 +36,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import * as pdfjs from "pdfjs-dist";
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Practice = "NP1" | "NP2" | "NP3" | "NP4" | "NP5";
@@ -1067,7 +1068,6 @@ export default function Home() {
     if (!file) return;
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       try {
-        const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
         const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
         const pages: string[] = [];
