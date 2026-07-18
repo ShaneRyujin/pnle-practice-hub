@@ -966,7 +966,7 @@ export default function Home() {
       setSignHadMiss(true);
       setSignStats((stats) => {
         const current = stats[currentSign.id] || { attempts: 0, misses: 0 };
-        const next = { ...stats, [currentSign.id]: { attempts: current.attempts + 1, misses: current.misses + 1 } };
+        const next = { ...stats, [currentSign.id]: { attempts: current.attempts + 1, misses: 1 } };
         localStorage.setItem("pnle-sign-stats", JSON.stringify(next)); return next;
       });
     }
