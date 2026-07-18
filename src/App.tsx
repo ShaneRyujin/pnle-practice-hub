@@ -953,8 +953,8 @@ export default function Home() {
     if (!signChoice || signResult) return;
     const correct = signChoice === signAnswerForStep(currentSign, signStep);
     const reviewingWeakSign = signReviewQueue.includes(currentSign.id);
-    setSignResult(correct ? "correct" : "wrong");
     if (!correct && !signHadMiss) {
+      setSignResult("wrong");
       setSignHadMiss(true);
       setSignStats((stats) => {
         const current = stats[currentSign.id] || { attempts: 0, misses: 0 };
@@ -962,6 +962,13 @@ export default function Home() {
         localStorage.setItem("pnle-sign-stats", JSON.stringify(next)); return next;
       });
     }
+    if (!correct) { setSignResult("wrong"); return; }
+    if (signStep < 3) {
+      const nextStep = (signStep + 1) as 1 | 2 | 3;
+      setSignStep(nextStep); setSignOptions(signOptionsForStep(currentSign, nextStep)); setSignChoice(""); setSignResult(null);
+      return;
+    }
+    setSignResult("correct");
     if (correct && signStep === 3) {
       setSignStats((stats) => {
         const current = stats[currentSign.id] || { attempts: 0, misses: 0 };
@@ -973,7 +980,6 @@ export default function Home() {
 
   function continueSignRecall() {
     if (signResult === "wrong") { setSignChoice(""); setSignResult(null); return; }
-    if (signStep < 3) { const nextStep = (signStep + 1) as 1 | 2 | 3; setSignStep(nextStep); setSignOptions(signOptionsForStep(currentSign, nextStep)); setSignChoice(""); setSignResult(null); return; }
     if (signReviewQueue.length && signReviewPosition < signReviewQueue.length - 1) {
       const nextPosition = signReviewPosition + 1; setSignReviewPosition(nextPosition);
       resetSign(SIGN_SETS.findIndex((sign) => sign.id === signReviewQueue[nextPosition])); return;
