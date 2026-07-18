@@ -23,6 +23,7 @@ import {
   NotebookPen,
   PenTool,
   Plus,
+  Puzzle,
   RotateCcw,
   Search,
   Spline,
@@ -43,7 +44,7 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 type Practice = "NP1" | "NP2" | "NP3" | "NP4" | "NP5";
 type Letter = "A" | "B" | "C" | "D";
-type View = "dashboard" | "practice" | "bank" | "vault" | "import";
+type View = "dashboard" | "practice" | "triads" | "bank" | "vault" | "import";
 type AnnotationColor = "yellow" | "red" | "blue" | "green";
 type PenMode = "draw" | "underline" | "circle" | "box" | "strike" | "scribble" | "erase";
 type ExamTool = "highlight" | "pen" | null;
@@ -82,6 +83,13 @@ const ANNOTATION_COLORS: Record<AnnotationColor, { label: string; ink: string; h
   blue: { label: "Blue", ink: "#3e83be", highlight: "rgba(104, 177, 233, .47)" },
   green: { label: "Green", ink: "#328d6d", highlight: "rgba(101, 191, 145, .46)" },
 };
+
+type TriadSet = { id: string; title: string; topic: string; clues: string[]; terms: string[]; decoys: string[]; explanation: string };
+const TRIAD_SETS: TriadSet[] = [
+  { id: "virchow", title: "Virchowâs triad", topic: "Venous thromboembolism", clues: ["A client is immobile after major surgery.", "Think of the three conditions that make venous thrombus formation more likely."], terms: ["Venous stasis", "Endothelial injury", "Hypercoagulability"], decoys: ["Bradycardia", "Hypovolemia", "Muffled heart sounds"], explanation: "Virchowâs triad explains thrombosis through stagnant blood flow, vessel-wall injury, and a blood state that clots too readily." },
+  { id: "beck", title: "Beckâs triad", topic: "Cardiac tamponade", clues: ["A client has a pericardial effusion that is compressing the heart.", "Choose the three classic findings caused by impaired cardiac filling."], terms: ["Hypotension", "Muffled heart sounds", "Jugular venous distention"], decoys: ["Widened pulse pressure", "Hyperthermia", "Bounding pulses"], explanation: "Beckâs triad signals cardiac tamponade: low blood pressure, quiet heart sounds, and raised jugular venous pressure." },
+  { id: "cushing", title: "Cushingâs triad", topic: "Increased intracranial pressure", clues: ["A neurologic client is deteriorating with markedly increased intracranial pressure.", "Identify the late vital-sign pattern that indicates brainstem compression."], terms: ["Bradycardia", "Widened pulse pressure", "Irregular respirations"], decoys: ["Tachycardia", "Narrow pulse pressure", "Kussmaul respirations"], explanation: "Cushingâs triad is a late and serious sign of increased ICP: bradycardia, widening pulse pressure, and irregular breathing." },
+];
 
 const sampleQuestions: Question[] = []; /* Built-in samples intentionally disabled: each student builds this bank from their own uploads.
   {
@@ -284,7 +292,7 @@ const sampleQuestions: Question[] = []; /* Built-in samples intentionally disabl
     np: "NP4",
     subject: "Psychiatric Nursing",
     topic: "Therapeutic Communication",
-    situation: "A client says, “The voices keep telling me that I am worthless.”",
+    situation: "A client says, âThe voices keep telling me that I am worthless.â",
     stem: "Which response by the nurse is most therapeutic?",
     choices: {
       A: "The voices are not real, so try to ignore them.",
@@ -487,7 +495,7 @@ function normalizeImported(records: Record<string, unknown>[]): Question[] {
     const topic = pick(record, "topic") || subject;
 
     if (!PRACTICES.includes(np) || !LETTERS.includes(correct) || !stem || LETTERS.some((letter) => !choices[letter])) {
-      throw new Error(`Row ${index + 1} is missing a valid NP1–NP5 label, question, four choices, or A–D answer.`);
+      throw new Error(`Row ${index + 1} is missing a valid NP1âNP5 label, question, four choices, or AâD answer.`);
     }
 
     const generalRationale = pick(record, "rationale", "explanation");
@@ -570,7 +578,7 @@ function pdfCandidateIssue(candidate: PdfCandidate): string | null {
 }
 
 function extractPdfSituations(text: string) {
-  const headings = [...text.matchAll(/\bSITUATION\s+(\d{1,3})\s*[-–:]?\s*/gi)];
+  const headings = [...text.matchAll(/\bSITUATION\s+(\d{1,3})\s*[-â:]?\s*/gi)];
   const situations = new Map<number, string>();
   headings.forEach((heading, index) => {
     const start = (heading.index || 0) + heading[0].length;
@@ -590,12 +598,12 @@ function formatSataText(text: string) {
 function parsePdfCandidates(text: string): PdfCandidate[] {
   const normalized = text.replace(/\u00a0/g, " ").replace(/\r/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   const situationBlocks = extractPdfSituations(normalized);
-  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*(?:\d{1,3}\.\s+|SITUATION\s+\d{1,3}\s*[-–:]?)|$)/gi)];
+  const matches = [...normalized.matchAll(/(?:^|\n)\s*(\d{1,3})\.\s+([\s\S]*?)(?=\n\s*(?:\d{1,3}\.\s+|SITUATION\s+\d{1,3}\s*[-â:]?)|$)/gi)];
   let latestSituation = "";
   const candidates: Array<PdfCandidate | null> = matches.map((match, index) => {
     const block = match[0];
     const before = normalized.slice(0, match.index);
-    const situations = [...before.matchAll(/(?:^|\n)\s*SITUATION\s+\d+\s*[-–:]?\s*([\s\S]*?)(?=\n\s*\d{1,3}\.\s+)/gi)];
+    const situations = [...before.matchAll(/(?:^|\n)\s*SITUATION\s+\d+\s*[-â:]?\s*([\s\S]*?)(?=\n\s*\d{1,3}\.\s+)/gi)];
     if (situations.length) latestSituation = situations[situations.length - 1][1].replace(/\s+/g, " ").trim();
     const optionMatches = [...block.matchAll(/(?:^|\n)\s*([a-dA-D])\.\s*([\s\S]*?)(?=\n\s*[a-dA-D]\.\s*|$)/g)];
     if (optionMatches.length < 4) return null;
@@ -671,6 +679,11 @@ export default function Home() {
   const [scratchTool, setScratchTool] = useState<"pen" | "highlight" | "erase">("pen");
   const [scratchColor, setScratchColor] = useState<AnnotationColor>("blue");
   const [scratchOpen, setScratchOpen] = useState(false);
+  const [triadIndex, setTriadIndex] = useState(0);
+  const [triadClueCount, setTriadClueCount] = useState(1);
+  const [triadSlots, setTriadSlots] = useState<(string | null)[]>([null, null, null]);
+  const [triadChecked, setTriadChecked] = useState(false);
+  const [draggedTriadTerm, setDraggedTriadTerm] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const markingLayerRef = useRef<SVGSVGElement>(null);
   const scratchLayerRef = useRef<SVGSVGElement>(null);
@@ -729,6 +742,7 @@ export default function Home() {
     [practiceNp, practiceSubject, questions],
   );
   const currentQuestion = filteredPractice[questionIndex % Math.max(filteredPractice.length, 1)];
+  const currentTriad = TRIAD_SETS[triadIndex];
   const currentQuestionPosition = questionIndex % Math.max(filteredPractice.length, 1);
   const currentEliminated = currentQuestion ? eliminated[currentQuestion.id] || [] : [];
   const currentMarkings = currentQuestion ? markings[currentQuestion.id] || [] : [];
@@ -798,6 +812,17 @@ export default function Home() {
     setMobileNav(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  function resetTriad(nextIndex = triadIndex) {
+    setTriadIndex(nextIndex); setTriadClueCount(1); setTriadSlots([null, null, null]); setTriadChecked(false); setDraggedTriadTerm(null);
+  }
+  function placeTriadTerm(term: string, slotIndex?: number) {
+    if (triadSlots.includes(term)) return;
+    const target = slotIndex ?? triadSlots.findIndex((slot) => !slot);
+    if (target < 0) return;
+    setTriadSlots((slots) => slots.map((slot, index) => index === target ? term : slot)); setTriadChecked(false);
+  }
+  function removeTriadTerm(slotIndex: number) { setTriadSlots((slots) => slots.map((slot, index) => index === slotIndex ? null : slot)); setTriadChecked(false); }
 
   function startPractice(np: Practice | "All" = "All") {
     setPracticeNp(np);
@@ -1117,7 +1142,7 @@ export default function Home() {
         }
         const extracted = pages.join("\n");
         const candidates = parsePdfCandidates(extracted);
-        if (!candidates.length) throw new Error("I could not find complete A–D questions in this PDF. Try a text-based PDF or import it as a CSV.");
+        if (!candidates.length) throw new Error("I could not find complete AâD questions in this PDF. Try a text-based PDF or import it as a CSV.");
         const suggestion = suggestPdfCategory(extracted);
         setPdfCandidates(candidates);
         setBatchNp(suggestion.np);
@@ -1166,7 +1191,7 @@ export default function Home() {
     const nextImported = [...imported, ...batch];
     setImported(nextImported);
     localStorage.setItem("pnle-imported-questions", JSON.stringify(nextImported));
-    setImportMessage({ type: "success", text: `${batch.length} PDF questions added under ${batchNp} · ${batchSubject}.` });
+    setImportMessage({ type: "success", text: `${batch.length} PDF questions added under ${batchNp} Â· ${batchSubject}.` });
     setPdfCandidates([]);
     setPdfFileName("");
   }
@@ -1255,13 +1280,13 @@ export default function Home() {
         const results = new Map(data.items.map((item) => [item.id, item.rationales]));
         setPdfCandidates((items) => items.map((item) => ({ ...item, rationales: { ...item.rationales, ...(results.get(item.id) || {}) } })));
       } catch (error) {
-        failures.push(`Q${start + 1}–${Math.min(start + chunk.length, snapshot.length)}: ${error instanceof Error ? error.message : "generation failed"}`);
+        failures.push(`Q${start + 1}â${Math.min(start + chunk.length, snapshot.length)}: ${error instanceof Error ? error.message : "generation failed"}`);
       }
       setBulkAiProgress({ completed: Math.min(start + chunk.length, snapshot.length), total: snapshot.length });
     }
 
     setBulkAiProgress(null);
-    setImportMessage(failures.length ? { type: "error", text: `AI completed what it could. ${failures.slice(0, 2).join(" · ")}` } : { type: "success", text: `AI enhanced rationales for all ${snapshot.length} extracted questions. Review them before importing.` });
+    setImportMessage(failures.length ? { type: "error", text: `AI completed what it could. ${failures.slice(0, 2).join(" Â· ")}` } : { type: "success", text: `AI enhanced rationales for all ${snapshot.length} extracted questions. Review them before importing.` });
   }
 
   async function scanPdfStructureWithAi() {
@@ -1354,11 +1379,12 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  if (!hydrated) return <main className="loading-screen">Preparing your review space…</main>;
+  if (!hydrated) return <main className="loading-screen">Preparing your review spaceâ¦</main>;
 
   const navItems: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
     { id: "practice", label: "Practice", icon: ClipboardCheck },
+    { id: "triads", label: "Triad Builder", icon: Puzzle },
     { id: "vault", label: "The Vault", icon: BookOpen },
     { id: "import", label: "Import questions", icon: FileUp },
   ];
@@ -1419,7 +1445,7 @@ export default function Home() {
           <button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={21} /></button>
           <div>
             <span className="eyebrow">BOARD REVIEW WORKSPACE</span>
-            <h1>{view === "dashboard" ? "Your PNLE review space" : view === "practice" ? "Practice session" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
+            <h1>{view === "dashboard" ? "Your PNLE review space" : view === "practice" ? "Practice session" : view === "triads" ? "Triad Builder" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
           </div>
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
@@ -1442,7 +1468,7 @@ export default function Home() {
               <div className="hero-copy">
                 <span className="hero-kicker"><Target size={16} /> TODAY'S REVIEW</span>
                 <h2>Build recall.<br />Spot the pattern.</h2>
-                <p>A focused mixed set from NP1–NP5, followed by option-by-option rationales.</p>
+                <p>A focused mixed set from NP1âNP5, followed by option-by-option rationales.</p>
                 <button className="primary-button" onClick={() => startPractice()}>
                   Start mixed practice <ArrowRight size={17} />
                 </button>
@@ -1461,8 +1487,8 @@ export default function Home() {
 
             <section className="metrics-strip" aria-label="Study metrics">
               <div><span>Questions answered</span><strong>{attempts.length}</strong><small>{imported.length} imported</small></div>
-              <div><span>Current accuracy</span><strong>{attempts.length ? `${accuracy}%` : "—"}</strong><small>{attempts.length ? `${attempts.filter((a) => a.correct).length} correct` : "Starts after question 1"}</small></div>
-              <div><span>Question bank</span><strong>{questions.length}</strong><small>Across NP1–NP5</small></div>
+              <div><span>Current accuracy</span><strong>{attempts.length ? `${accuracy}%` : "â"}</strong><small>{attempts.length ? `${attempts.filter((a) => a.correct).length} correct` : "Starts after question 1"}</small></div>
+              <div><span>Question bank</span><strong>{questions.length}</strong><small>Across NP1âNP5</small></div>
               <div><span>Topics practiced</span><strong>{topicStats.length}</strong><small>of {new Set(questions.map((q) => q.topic)).size} available</small></div>
             </section>
 
@@ -1497,7 +1523,7 @@ export default function Home() {
                   {attentionTopics.length ? attentionTopics.map((item, index) => (
                     <button key={`${item.topic}-${index}`} onClick={() => startPractice(item.np as Practice)}>
                       <span className="attention-rank">0{index + 1}</span>
-                      <span><strong>{item.topic}</strong><small>{item.np} · {item.attempts} attempts</small></span>
+                      <span><strong>{item.topic}</strong><small>{item.np} Â· {item.attempts} attempts</small></span>
                       <span className={`attention-score ${scoreTone(item.score)}`}>{item.score}%</span>
                     </button>
                   )) : <div className="attention-empty">Answer questions to identify the topics that need your attention.</div>}
@@ -1508,7 +1534,7 @@ export default function Home() {
 
             <section className="weekly-panel panel">
               <div className="panel-heading"><div><span className="section-kicker">THIS WEEK</span><h3>Your study snapshot</h3></div><span className="subtle-label">Last 7 days</span></div>
-              <div className="weekly-stats"><div><strong>{attempts.length}</strong><span>questions answered</span></div><div><strong>{attempts.length ? `${accuracy}%` : "—"}</strong><span>average score</span></div><button onClick={() => navigate("vault")}><strong>{vaultQuestions.length}</strong><span>in The Vault</span></button></div>
+              <div className="weekly-stats"><div><strong>{attempts.length}</strong><span>questions answered</span></div><div><strong>{attempts.length ? `${accuracy}%` : "â"}</strong><span>average score</span></div><button onClick={() => navigate("vault")}><strong>{vaultQuestions.length}</strong><span>in The Vault</span></button></div>
               <div className="weekly-focus"><div><span className="focus-dot strong" /><p><small>Strongest area</small><strong>{strongestTopic?.topic || "Build your first strength"}</strong></p></div><div><span className="focus-dot focus" /><p><small>Focus area</small><strong>{focusTopic?.topic || "Answer a few questions to spot it"}</strong></p></div></div>
             </section>
 
@@ -1521,6 +1547,21 @@ export default function Home() {
               <div className="panel-heading"><div><span className="section-kicker">QUESTION BANK</span><h3>Keep your material organized</h3></div><button className="text-button" onClick={() => navigate("bank")}>Open question bank <ArrowRight size={15} /></button></div>
               <div className="dashboard-bank-list">{questions.slice(0, 4).map((question) => <button key={question.id} onClick={() => startPractice(question.np)}><span>{question.np}</span><p>{question.stem}</p><small>{question.subject}</small></button>)}</div>
             </section>
+          </div>
+        )}
+
+        {view === "triads" && (
+          <div className="page-content triad-page">
+            <section className="triad-hero"><div><span className="section-kicker">RECALL BUILDER</span><h2>Complete the clinical triad</h2><p>Reveal one or two clues, then click or drag the three findings that belong together.</p></div><div className="triad-progress"><span>{triadIndex + 1} / {TRIAD_SETS.length}</span><div><i style={{ width: `${((triadIndex + 1) / TRIAD_SETS.length) * 100}%` }} /></div></div></section>
+            <section className="panel triad-builder-card">
+              <div className="triad-card-head"><div><span className="section-kicker">{currentTriad.topic.toUpperCase()}</span><h3>{currentTriad.title}</h3></div><Puzzle size={23} /></div>
+              <div className="triad-clues">{currentTriad.clues.slice(0, triadClueCount).map((clue, index) => <p key={clue}><span>CLUE {index + 1}</span>{clue}</p>)}{triadClueCount < currentTriad.clues.length && <button className="text-button" onClick={() => setTriadClueCount((count) => count + 1)}>Reveal next clue <ArrowRight size={15} /></button>}</div>
+              <div className="triad-slots" aria-label="Your triad answer">{triadSlots.map((term, index) => <button key={index} className={`triad-slot ${term ? "filled" : ""}`} onClick={() => term ? removeTriadTerm(index) : draggedTriadTerm && placeTriadTerm(draggedTriadTerm, index)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (draggedTriadTerm) placeTriadTerm(draggedTriadTerm, index); setDraggedTriadTerm(null); }}><small>PART {index + 1}</small><strong>{term || "Drop or select a finding"}</strong></button>)}</div>
+              <div className="triad-term-bank" aria-label="Available findings">{[...currentTriad.terms, ...currentTriad.decoys].filter((term) => !triadSlots.includes(term)).map((term) => <button key={term} draggable onDragStart={() => setDraggedTriadTerm(term)} onDragEnd={() => setDraggedTriadTerm(null)} onClick={() => placeTriadTerm(term)}>{term}</button>)}</div>
+              <div className="triad-actions"><button className="secondary-button" onClick={() => resetTriad()}><RotateCcw size={16} /> Reset</button><button className="primary-button" disabled={triadSlots.some((slot) => !slot)} onClick={() => setTriadChecked(true)}><Check size={17} /> Check triad</button></div>
+              {triadChecked && <div className={`triad-feedback ${currentTriad.terms.every((term) => triadSlots.includes(term)) ? "correct" : "incorrect"}`}>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? <CheckCircle2 size={19} /> : <XCircle size={19} />}<div><strong>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? "Thatâs the complete triad." : "Almostâreview the classic three findings."}</strong><p>{currentTriad.explanation}</p></div></div>}
+            </section>
+            <div className="triad-footer"><div><span className="section-kicker">NEXT SET</span><strong>{TRIAD_SETS[(triadIndex + 1) % TRIAD_SETS.length].title}</strong></div><button className="primary-button" onClick={() => resetTriad((triadIndex + 1) % TRIAD_SETS.length)}>Next triad <ArrowRight size={17} /></button></div>
           </div>
         )}
 
@@ -1578,12 +1619,12 @@ export default function Home() {
                 <div className={`exam-annotatable ${examTool ? `tool-${examTool}` : ""}`}>
                   {currentQuestion.situation && (
                     <section className="exam-situation-box">
-                      <div className="exam-classification"><span>Situation</span><i>·</i><span>{currentQuestion.np}</span><small>{currentQuestion.topic}</small></div>
+                      <div className="exam-classification"><span>Situation</span><i>Â·</i><span>{currentQuestion.np}</span><small>{currentQuestion.topic}</small></div>
                       <p>{renderHighlightText(currentQuestion.situation, "situation")}</p>
                     </section>
                   )}
                   <div className="exam-question-box">
-                    <div className="exam-classification"><span>{currentQuestion.np}</span><i>·</i><span>{currentQuestion.topic}</span><small>{currentQuestion.source === "sample" ? "SAMPLE BANK" : "IMPORTED"}</small></div>
+                    <div className="exam-classification"><span>{currentQuestion.np}</span><i>Â·</i><span>{currentQuestion.topic}</span><small>{currentQuestion.source === "sample" ? "SAMPLE BANK" : "IMPORTED"}</small></div>
                     <h2>{renderHighlightText(formatSataText(currentQuestion.stem), "question")}</h2>
                   </div>
 
@@ -1623,7 +1664,7 @@ export default function Home() {
                   </svg>
                 </div>
 
-                <div className="exam-keyboard-tip">Tip: press <kbd>1</kbd>–<kbd>4</kbd> to pick an answer, then <kbd>Space</kbd> to submit.</div>
+                <div className="exam-keyboard-tip">Tip: press <kbd>1</kbd>â<kbd>4</kbd> to pick an answer, then <kbd>Space</kbd> to submit.</div>
                 <div className="confidence-row">
                   <span>How sure are you?</span>
                   <div role="group" aria-label="Answer confidence">
@@ -1656,7 +1697,7 @@ export default function Home() {
 
             {scratchOpen && currentQuestion && (
               <aside className="scratch-bottom-panel" aria-label="Scratch pad">
-                <div className="scratch-head"><div><NotebookPen size={18} /><span><strong>Scratch pad</strong><small>Question {(questionIndex % filteredPractice.length) + 1} · stays until you clear it</small></span></div><button onClick={() => setScratchOpen(false)} aria-label="Collapse scratch pad"><X size={18} /></button></div>
+                <div className="scratch-head"><div><NotebookPen size={18} /><span><strong>Scratch pad</strong><small>Question {(questionIndex % filteredPractice.length) + 1} Â· stays until you clear it</small></span></div><button onClick={() => setScratchOpen(false)} aria-label="Collapse scratch pad"><X size={18} /></button></div>
                 <div className="scratch-tool-row" role="toolbar" aria-label="Scratch pad tools">
                   <div className="scratch-tabs"><button className={scratchMode === "draw" ? "active" : ""} onClick={() => setScratchMode("draw")}>Draw</button><button className={scratchMode === "type" ? "active" : ""} onClick={() => setScratchMode("type")}>Type</button></div>
                   <div className="scratch-tool-picker">
@@ -1667,13 +1708,13 @@ export default function Home() {
                   </div>
                 </div>
                 <div className={`scratch-surface ${scratchMode === "draw" ? "draw-mode" : "type-mode"}`}>
-                  {scratchMode === "type" && <textarea value={scratchNotes[currentQuestion.id] || ""} onChange={(event) => updateScratch(event.target.value)} placeholder={'Notes…\n\nFormula:\nWorkings:\nFinal answer:'} />}
+                  {scratchMode === "type" && <textarea value={scratchNotes[currentQuestion.id] || ""} onChange={(event) => updateScratch(event.target.value)} placeholder={'Notesâ¦\n\nFormula:\nWorkings:\nFinal answer:'} />}
                   <svg ref={scratchLayerRef} className="scratch-marking-layer" onPointerDown={startScratchMark} onPointerMove={continueScratchMark} onPointerUp={stopScratchMark} onPointerCancel={stopScratchMark} aria-label="Scratch drawing surface">
                     {currentScratchMarks.map((mark) => <path key={mark.id} d={mark.d} className={`scratch-mark ${mark.tool}`} style={{ stroke: mark.tool === "highlight" ? ANNOTATION_COLORS[mark.color].highlight : ANNOTATION_COLORS[mark.color].ink }} />)}
                   </svg>
                   {scratchMode === "draw" && <p className="scratch-draw-hint">Draw with your mouse or finger. Choose the pen, highlighter, or eraser above.</p>}
                 </div>
-                <div className="scratch-actions"><button onClick={clearScratchPad}><Eraser size={15} /> Clear pad</button><span>{(scratchNotes[currentQuestion.id] || "").length} typed · {currentScratchMarks.length} marks</span></div>
+                <div className="scratch-actions"><button onClick={clearScratchPad}><Eraser size={15} /> Clear pad</button><span>{(scratchNotes[currentQuestion.id] || "").length} typed Â· {currentScratchMarks.length} marks</span></div>
               </aside>
             )}
           </div>
@@ -1682,7 +1723,7 @@ export default function Home() {
         {view === "bank" && (
           <div className="page-content bank-page">
             <div className="page-intro">
-              <div><span className="section-kicker">ORGANIZED REVIEW LIBRARY</span><h2>{questions.length} questions across NP1–NP5</h2><p>Find an item by keyword, subject, or topic. Imported questions stay on this device.</p></div>
+              <div><span className="section-kicker">ORGANIZED REVIEW LIBRARY</span><h2>{questions.length} questions across NP1âNP5</h2><p>Find an item by keyword, subject, or topic. Imported questions stay on this device.</p></div>
               <button className="primary-button" onClick={() => navigate("import")}><Plus size={17} /> Import questions</button>
             </div>
             <div className="bank-controls">
@@ -1701,7 +1742,7 @@ export default function Home() {
               {bankQuestions.map((question, index) => (
                 <article key={question.id} className="bank-row">
                   <div className="bank-question">{question.source === "imported" ? <input className="import-select" type="checkbox" checked={selectedImportIds.includes(question.id)} onChange={() => toggleImportedSelection(question.id)} aria-label={`Select question ${index + 1}`} /> : <span className="bank-number">{String(index + 1).padStart(2, "0")}</span>}<p>{question.stem}</p></div>
-                  <div className="bank-class"><strong>{question.np} · {question.subject}</strong><small>{question.topic}</small></div>
+                  <div className="bank-class"><strong>{question.np} Â· {question.subject}</strong><small>{question.topic}</small></div>
                   <span className={`source-label ${question.source}`}>{question.source}</span>
                   <div className="bank-actions">
                     <button onClick={() => { setPracticeNp(question.np); setPracticeSubject(question.subject); setQuestionIndex(Math.max(0, questions.filter((q) => q.np === question.np && q.subject === question.subject).findIndex((q) => q.id === question.id))); setSelected(null); setRevealed(false); navigate("practice"); }} aria-label="Practice this question"><ArrowRight size={17} /></button>
@@ -1718,7 +1759,7 @@ export default function Home() {
         {view === "vault" && (
           <div className="page-content bank-page vault-page">
             <div className="page-intro"><div><span className="section-kicker">REVIEW WHAT YOU MISSED</span><h2>The Vault</h2><p>Questions go here when your first answer is incorrect. Keep them for review, or remove them when you feel ready.</p></div><button className="primary-button" onClick={() => startPractice()}><ClipboardCheck size={17} /> Practice mixed set</button></div>
-            {vaultQuestions.length ? <div className="bank-list vault-list"><div className="bank-list-head"><span>Question</span><span>Classification</span><span>Source</span><span /></div>{vaultQuestions.map((question, index) => <article key={question.id} className="bank-row"><div className="bank-question"><span>{String(index + 1).padStart(2, "0")}</span><p>{question.stem}</p></div><div className="bank-class"><strong>{question.np} · {question.subject}</strong><small>{question.topic}</small></div><span className="source-label imported">Vault</span><div className="bank-actions"><button onClick={() => { setPracticeNp(question.np); setPracticeSubject(question.subject); setQuestionIndex(0); setSelected(null); setRevealed(false); navigate("practice"); }} aria-label="Practice this question"><ArrowRight size={17} /></button><button className="danger" onClick={() => removeFromVault(question.id)} aria-label="Remove from The Vault"><Trash2 size={16} /></button></div></article>)}</div> : <div className="empty-state"><BookOpen size={28} /><h2>Your Vault is clear</h2><p>Missed questions will be saved here automatically so you can revisit them later.</p><button className="primary-button" onClick={() => startPractice()}>Practice now</button></div>}
+            {vaultQuestions.length ? <div className="bank-list vault-list"><div className="bank-list-head"><span>Question</span><span>Classification</span><span>Source</span><span /></div>{vaultQuestions.map((question, index) => <article key={question.id} className="bank-row"><div className="bank-question"><span>{String(index + 1).padStart(2, "0")}</span><p>{question.stem}</p></div><div className="bank-class"><strong>{question.np} Â· {question.subject}</strong><small>{question.topic}</small></div><span className="source-label imported">Vault</span><div className="bank-actions"><button onClick={() => { setPracticeNp(question.np); setPracticeSubject(question.subject); setQuestionIndex(0); setSelected(null); setRevealed(false); navigate("practice"); }} aria-label="Practice this question"><ArrowRight size={17} /></button><button className="danger" onClick={() => removeFromVault(question.id)} aria-label="Remove from The Vault"><Trash2 size={16} /></button></div></article>)}</div> : <div className="empty-state"><BookOpen size={28} /><h2>Your Vault is clear</h2><p>Missed questions will be saved here automatically so you can revisit them later.</p><button className="primary-button" onClick={() => startPractice()}>Practice now</button></div>}
           </div>
         )}
 
@@ -1734,7 +1775,7 @@ export default function Home() {
                   <input ref={fileRef} type="file" accept=".csv,.tsv,.json,.txt,.pdf,application/pdf" onChange={handleFile} />
                   <span className="upload-icon"><FileUp size={24} /></span>
                   <h3>Choose a question file</h3>
-                  <p>CSV, TSV, JSON, plain text, or PDF · processed on your device</p>
+                  <p>CSV, TSV, JSON, plain text, or PDF Â· processed on your device</p>
                   <button className="secondary-button" type="button">Browse files</button>
                 </div>
                 <div className="or-divider"><span>or paste the contents</span></div>
@@ -1746,17 +1787,17 @@ export default function Home() {
                 <button className="primary-button import-button" disabled={!importText.trim()} onClick={importQuestions}><Upload size={17} /> Validate and import</button>
                 {pdfCandidates.length > 0 && (
                   <section className="pdf-review" aria-label="PDF import review">
-                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><div className="pdf-review-actions"><span className="pdf-count">{pdfCandidates.length} items</span><button type="button" className="batch-ai-button" disabled={Boolean(pdfScanProgress)} onClick={scanPdfStructureWithAi}><Sparkles size={14} /> {pdfScanProgress ? `Scanning pages ${pdfScanProgress.completed}/${pdfScanProgress.total}…` : "AI scan situations & answers"}</button><button type="button" className="batch-ai-button" disabled={Boolean(bulkAiProgress) || Boolean(pdfScanProgress)} onClick={enhancePdfBatchWithAi}><Sparkles size={14} /> {bulkAiProgress ? `Enhancing ${bulkAiProgress.completed}/${bulkAiProgress.total}…` : "Enhance all rationales with AI"}</button></div></div>
+                    <div className="pdf-review-head"><div><span className="section-kicker">PDF REVIEW</span><h3>{pdfFileName}</h3><p>{pdfCandidates.length} extracted questions. The proposed category is editable before import.</p></div><div className="pdf-review-actions"><span className="pdf-count">{pdfCandidates.length} items</span><button type="button" className="batch-ai-button" disabled={Boolean(pdfScanProgress)} onClick={scanPdfStructureWithAi}><Sparkles size={14} /> {pdfScanProgress ? `Scanning pages ${pdfScanProgress.completed}/${pdfScanProgress.total}â¦` : "AI scan situations & answers"}</button><button type="button" className="batch-ai-button" disabled={Boolean(bulkAiProgress) || Boolean(pdfScanProgress)} onClick={enhancePdfBatchWithAi}><Sparkles size={14} /> {bulkAiProgress ? `Enhancing ${bulkAiProgress.completed}/${bulkAiProgress.total}â¦` : "Enhance all rationales with AI"}</button></div></div>
                     <div className="batch-fields">
                       <label><span>Nursing Practice</span><select value={batchNp} onChange={(event) => setBatchNp(event.target.value as Practice)}>{PRACTICES.map((np) => <option key={np}>{np}</option>)}</select></label>
                       <label><span>Subject</span><input value={batchSubject} onChange={(event) => setBatchSubject(event.target.value)} list="pdf-subjects" /></label>
                       <label><span>Topic</span><input value={batchTopic} onChange={(event) => setBatchTopic(event.target.value)} /></label>
                       <datalist id="pdf-subjects">{subjects.map((subject) => <option key={subject} value={subject} />)}</datalist>
                     </div>
-                    <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDF’s wording: <strong>{batchNp} · {batchSubject}</strong>. You can change this for the entire batch.</span></div>
+                    <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDFâs wording: <strong>{batchNp} Â· {batchSubject}</strong>. You can change this for the entire batch.</span></div>
                     {pdfIssues.length > 0 && <div className="pdf-issue-jump"><XCircle size={17} /><div><strong>{pdfIssues.length} item{pdfIssues.length === 1 ? " needs" : "s need"} review</strong><span>Fix the highlighted questions before importing.</span></div><nav>{pdfIssues.map(({ index }) => <a key={index} href={`#pdf-candidate-${index + 1}`}>Q{index + 1}</a>)}</nav></div>}
                     <div className="pdf-candidate-list">
-                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><div className="rationale-actions"><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill template</button><button type="button" className="generate-rationale-button" disabled={aiGenerating === `${index}-${letter}`} onClick={() => generatePdfRationale(index, letter)}><Sparkles size={12} /> {aiGenerating === `${index}-${letter}` ? "Generating…" : "Generate with AI"}</button></div></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
+                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><div className="rationale-actions"><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill template</button><button type="button" className="generate-rationale-button" disabled={aiGenerating === `${index}-${letter}`} onClick={() => generatePdfRationale(index, letter)}><Sparkles size={12} /> {aiGenerating === `${index}-${letter}` ? "Generatingâ¦" : "Generate with AI"}</button></div></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} Â· ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
                     </div>
                     <button className="primary-button import-button" disabled={pdfIssues.length > 0} onClick={importPdfBatch}><Upload size={17} /> {pdfIssues.length ? "Fix flagged questions to import" : "Add reviewed PDF batch"}</button>
                   </section>
@@ -1768,13 +1809,13 @@ export default function Home() {
                 {importGuideOpen && <div className="import-guide-content"><span className="section-kicker">FORMAT GUIDE</span>
                 <h3>Required columns</h3>
                 <div className="field-list">
-                  {["PDF batch — choose NP + subject after extraction", "CSV: np — NP1, NP2, NP3, NP4, or NP5", "subject and topic", "question", "option_a, option_b, option_c, option_d", "answer — A, B, C, or D"].map((field) => <div key={field}><Check size={15} /><span>{field}</span></div>)}
+                  {["PDF batch â choose NP + subject after extraction", "CSV: np â NP1, NP2, NP3, NP4, or NP5", "subject and topic", "question", "option_a, option_b, option_c, option_d", "answer â A, B, C, or D"].map((field) => <div key={field}><Check size={15} /><span>{field}</span></div>)}
                 </div>
                 <h3>Optional, but useful</h3>
                 <div className="field-list optional">
-                  {["situation", "rationale_a through rationale_d", "rationale — for the correct answer"].map((field) => <div key={field}><Plus size={15} /><span>{field}</span></div>)}
+                  {["situation", "rationale_a through rationale_d", "rationale â for the correct answer"].map((field) => <div key={field}><Plus size={15} /><span>{field}</span></div>)}
                 </div>
-                <div className="guide-tip"><Sparkles size={18} /><p><strong>Best review experience</strong><br />Include a rationale for every choice so you learn why distractors are wrong—not only which letter is correct.</p></div>
+                <div className="guide-tip"><Sparkles size={18} /><p><strong>Best review experience</strong><br />Include a rationale for every choice so you learn why distractors are wrongânot only which letter is correct.</p></div>
                 <div className="bank-summary"><span>Current bank</span><strong>{questions.length}</strong><small>{imported.length} imported</small></div>
                 </div>}
               </aside>
