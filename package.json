@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.6",
