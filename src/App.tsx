@@ -53,7 +53,7 @@ type Confidence = "sure" | "unsure" | "guessing" | null;
 type Point = { x: number; y: number };
 type MarkPath = { id: string; tool: "pen" | "highlight"; kind: Exclude<PenMode, "erase">; color: AnnotationColor; d: string; start: Point; end: Point };
 type TextPenMark = { id: string; mode: Exclude<PenMode, "draw" | "erase">; color: AnnotationColor; start: number; end: number };
-type PdfCandidate = Omit<Question, "id" | "np" | "subject" | "source"> & { id: string; answerDetected: boolean; sourcePage?: number; questionNumber?: number };
+type PdfCandidate = Omit<Question, "id" | "np" | "subject" | "source"> & { id: string; answerDetected: boolean; sourcePage?: number; questionNumber?: number; needsSituationReview?: boolean };
 
 type Question = {
   id: string;
@@ -621,6 +621,7 @@ function textContentToPdfLines(items: unknown[]): string {
 function pdfCandidateIssue(candidate: PdfCandidate): string | null {
   if (!candidate.stem.trim()) return "The question text is missing.";
   if (LETTERS.some((letter) => !candidate.choices[letter]?.trim())) return "One or more answer choices are missing.";
+  if (candidate.needsSituationReview) return "A situation heading may be missing for this question. Confirm the shared scenario before importing.";
   const finalChoice = candidate.choices.D;
   if (finalChoice.length > 260 || /\b(?:difficulty|rationale|answer\s*key|explanation)\b/i.test(finalChoice) || /\bA\s+B\s+C\s+D\b/i.test(finalChoice)) {
     return "Choice D may include answer-key or rationale text. Edit and verify it before importing.";
@@ -634,11 +635,21 @@ function extractPdfSituations(text: string) {
   headings.forEach((heading, index) => {
     const start = (heading.index || 0) + heading[0].length;
     const untilNextHeading = text.slice(start, headings[index + 1]?.index || text.length);
-    const firstQuestion = untilNextHeading.search(/\n\s*\d{1,3}\.\s+/);
+    // Question numbers are normally on their own PDF text line. Never consume the
+    // question body as part of a situation just because a PDF collapsed spacing.
+    const firstQuestion = untilNextHeading.search(/(?:^|\n)\s*\d{1,3}\.\s+/);
     const content = (firstQuestion >= 0 ? untilNextHeading.slice(0, firstQuestion) : untilNextHeading).replace(/\s+/g, " ").trim();
     if (content) situations.set(Number(heading[1]), content);
   });
   return situations;
+}
+
+function cleanPdfChoice(text: string) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  // These markers never belong inside a choice. Cutting here prevents the next
+  // situation or an answer-key explanation from becoming the end of choice D.
+  const leak = compact.search(/\b(?:SITUATION\s+\d{1,3}\s*[-–:]?|ANSWER\s*(?:KEY|RATIONALE)|RATIONALE(?:S)?\s*[:\-]|EXPLANATION\s*[:\-])\b/i);
+  return (leak >= 0 ? compact.slice(0, leak) : compact).trim();
 }
 
 function formatSataText(text: string) {
@@ -661,7 +672,7 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     const firstOption = optionMatches[0].index ?? block.length;
     const stem = formatSataText(block.slice(0, firstOption).replace(/^\s*\d{1,3}\.\s*/, "").replace(/\s+/g, " ").trim());
     const choices = {} as Record<Letter, string>;
-    optionMatches.slice(0, 4).forEach((option) => { choices[option[1].toUpperCase() as Letter] = option[2].replace(/\s+/g, " ").trim(); });
+    optionMatches.slice(0, 4).forEach((option) => { choices[option[1].toUpperCase() as Letter] = cleanPdfChoice(option[2]); });
     const feedback = optionMatches.slice(4).map((option) => `${option[1]}. ${option[2]}`).join(" ");
     const explicit = feedback.match(/\b([A-D])\.\s*(?:correct answer|correct\b)/i);
     const correct = (explicit?.[1]?.toUpperCase() || "A") as Letter;
@@ -669,10 +680,18 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     [...feedback.matchAll(/\b([A-D])\.\s*([\s\S]*?)(?=\s+[A-D]\.|$)/gi)].forEach((note) => { rationales[note[1].toUpperCase() as Letter] = note[2].replace(/\s+/g, " ").trim(); });
     return { id: `pdf-${index}`, questionNumber: Number(match[1]), situation: latestSituation || undefined, stem, choices, correct, rationales, topic: "", answerDetected: Boolean(explicit) };
   });
-  return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter]))).map((item, index) => ({
-    ...item,
-    situation: situationBlocks.get(Math.ceil((item.questionNumber || index + 1) / 5)) || item.situation || undefined,
-  }));
+  return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter]))).map((item, index) => {
+    const expectedSituation = Math.ceil((item.questionNumber || index + 1) / 5);
+    const detectedSituation = situationBlocks.get(expectedSituation);
+    return {
+      ...item,
+      // Situation sets are usually five questions long, but that is only a safe
+      // fallback when the matching heading was actually extracted. Do not reuse
+      // an older scenario for a later question.
+      situation: situationBlocks.size ? detectedSituation || undefined : item.situation || undefined,
+      needsSituationReview: Boolean(situationBlocks.size && !detectedSituation),
+    };
+  });
 }
 
 function scoreTone(score: number) {
