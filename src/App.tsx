@@ -85,6 +85,7 @@ const ANNOTATION_COLORS: Record<AnnotationColor, { label: string; ink: string; h
 };
 
 type TriadSet = { id: string; title: string; topic: string; clues: string[]; terms: string[]; decoys: string[]; explanation: string };
+type TriadStats = Record<string, { attempts: number; misses: number }>;
 const TRIAD_SETS: TriadSet[] = [
   { id: "aaa", title: "Abdominal aortic aneurysm triad", topic: "Cardiovascular emergency", clues: ["A client has sudden severe abdominal or back pain and signs of hypovolemia.", "Choose the classic triad of an abdominal aortic aneurysm."], terms: ["Hypotension", "Pulsatile abdominal mass", "Flank pain"], decoys: ["Muffled heart sounds", "Bradycardia", "Jaundice"], explanation: "The source identifies hypotension, a pulsatile abdominal mass, and flank pain as the triad for abdominal aortic aneurysm." },
   { id: "beck", title: "Beck's triad", topic: "Cardiac tamponade", clues: ["A client has a pericardial effusion that is compressing the heart.", "Choose the three classic findings caused by impaired cardiac filling."], terms: ["Muffled heart sounds", "Distended neck veins", "Hypotension"], decoys: ["Widened pulse pressure", "Hyperthermia", "Bounding pulses"], explanation: "Beck's triad signals cardiac tamponade: quiet heart sounds, distended neck veins, and hypotension." },
@@ -698,6 +699,9 @@ export default function Home() {
   const [triadSlots, setTriadSlots] = useState<(string | null)[]>([null, null, null]);
   const [triadChecked, setTriadChecked] = useState(false);
   const [draggedTriadTerm, setDraggedTriadTerm] = useState<string | null>(null);
+  const [triadStats, setTriadStats] = useState<TriadStats>({});
+  const [triadReviewQueue, setTriadReviewQueue] = useState<string[]>([]);
+  const [triadReviewPosition, setTriadReviewPosition] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const markingLayerRef = useRef<SVGSVGElement>(null);
   const scratchLayerRef = useRef<SVGSVGElement>(null);
@@ -714,12 +718,14 @@ export default function Home() {
       const savedFlags = JSON.parse(localStorage.getItem("pnle-flagged") || "[]");
       const savedScratch = JSON.parse(localStorage.getItem("pnle-scratch-notes") || "{}");
       const savedScratchMarks = JSON.parse(localStorage.getItem("pnle-scratch-marks") || "{}");
+      const savedTriadStats = JSON.parse(localStorage.getItem("pnle-triad-stats") || "{}");
       if (Array.isArray(savedQuestions)) setImported(savedQuestions);
       if (Array.isArray(savedAttempts)) setAttempts(savedAttempts);
       if (Array.isArray(savedVault)) setVaultIds(savedVault);
       if (Array.isArray(savedFlags)) setFlagged(savedFlags);
       if (savedScratch && typeof savedScratch === "object") setScratchNotes(savedScratch);
       if (savedScratchMarks && typeof savedScratchMarks === "object") setScratchMarks(savedScratchMarks);
+      if (savedTriadStats && typeof savedTriadStats === "object") setTriadStats(savedTriadStats);
     } catch {
       localStorage.removeItem("pnle-imported-questions");
       localStorage.removeItem("pnle-attempts");
@@ -820,6 +826,7 @@ export default function Home() {
           question.topic.toLowerCase().includes(query)),
     );
   }, [bankNp, bankQuery, questions]);
+  const weakTriads = useMemo(() => TRIAD_SETS.filter((triad) => (triadStats[triad.id]?.misses || 0) > 0).sort((a, b) => (triadStats[b.id]?.misses || 0) - (triadStats[a.id]?.misses || 0) || (triadStats[b.id]?.attempts || 0) - (triadStats[a.id]?.attempts || 0)), [triadStats]);
 
   function navigate(next: View) {
     setView(next);
@@ -837,6 +844,37 @@ export default function Home() {
     setTriadSlots((slots) => slots.map((slot, index) => index === target ? term : slot)); setTriadChecked(false);
   }
   function removeTriadTerm(slotIndex: number) { setTriadSlots((slots) => slots.map((slot, index) => index === slotIndex ? null : slot)); setTriadChecked(false); }
+
+  function checkTriadAnswer() {
+    if (triadChecked || triadSlots.some((slot) => !slot)) return;
+    const correct = currentTriad.terms.every((term) => triadSlots.includes(term));
+    setTriadChecked(true);
+    setTriadStats((stats) => {
+      const current = stats[currentTriad.id] || { attempts: 0, misses: 0 };
+      const next = { ...stats, [currentTriad.id]: { attempts: current.attempts + 1, misses: current.misses + (correct ? 0 : 1) } };
+      localStorage.setItem("pnle-triad-stats", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function startWeakTriadReview() {
+    if (!weakTriads.length) return;
+    const queue = weakTriads.map((triad) => triad.id);
+    setTriadReviewQueue(queue);
+    setTriadReviewPosition(0);
+    resetTriad(TRIAD_SETS.findIndex((triad) => triad.id === queue[0]));
+  }
+
+  function goToNextTriad() {
+    if (triadReviewQueue.length && triadReviewPosition < triadReviewQueue.length - 1) {
+      const nextPosition = triadReviewPosition + 1;
+      setTriadReviewPosition(nextPosition);
+      resetTriad(TRIAD_SETS.findIndex((triad) => triad.id === triadReviewQueue[nextPosition]));
+      return;
+    }
+    if (triadReviewQueue.length) { setTriadReviewQueue([]); setTriadReviewPosition(0); }
+    resetTriad((triadIndex + 1) % TRIAD_SETS.length);
+  }
 
   function startPractice(np: Practice | "All" = "All") {
     setPracticeNp(np);
@@ -1566,16 +1604,16 @@ export default function Home() {
 
         {view === "triads" && (
           <div className="page-content triad-page">
-            <section className="triad-hero"><div><span className="section-kicker">RECALL BUILDER</span><h2>Complete the clinical triad</h2><p>Reveal one or two clues, then click or drag the three findings that belong together.</p></div><div className="triad-progress"><span>{triadIndex + 1} / {TRIAD_SETS.length}</span><div><i style={{ width: `${((triadIndex + 1) / TRIAD_SETS.length) * 100}%` }} /></div></div></section>
+            <section className="triad-hero"><div><span className="section-kicker">RECALL BUILDER</span><h2>Complete the clinical triad</h2><p>Reveal one or two clues, then click or drag the three findings that belong together.</p></div><div className="triad-hero-actions"><button className="weak-triad-button" disabled={!weakTriads.length} onClick={startWeakTriadReview}><RotateCcw size={15} /> Review weak triads {weakTriads.length ? `(${weakTriads.length})` : ""}</button><div className="triad-progress"><span>{triadReviewQueue.length ? `Weak review ${triadReviewPosition + 1} / ${triadReviewQueue.length}` : `${triadIndex + 1} / ${TRIAD_SETS.length}`}</span><div><i style={{ width: `${triadReviewQueue.length ? ((triadReviewPosition + 1) / triadReviewQueue.length) * 100 : ((triadIndex + 1) / TRIAD_SETS.length) * 100}%` }} /></div></div></div></section>
             <section className="panel triad-builder-card">
               <div className="triad-card-head"><div><span className="section-kicker">{currentTriad.topic.toUpperCase()}</span><h3>{currentTriad.title}</h3></div><Puzzle size={23} /></div>
               <div className="triad-clues">{currentTriad.clues.slice(0, triadClueCount).map((clue, index) => <p key={clue}><span>CLUE {index + 1}</span>{clue}</p>)}{triadClueCount < currentTriad.clues.length && <button className="text-button" onClick={() => setTriadClueCount((count) => count + 1)}>Reveal next clue <ArrowRight size={15} /></button>}</div>
               <div className="triad-slots" aria-label="Your triad answer">{triadSlots.map((term, index) => <button key={index} className={`triad-slot ${term ? "filled" : ""}`} onClick={() => term ? removeTriadTerm(index) : draggedTriadTerm && placeTriadTerm(draggedTriadTerm, index)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (draggedTriadTerm) placeTriadTerm(draggedTriadTerm, index); setDraggedTriadTerm(null); }}><small>PART {index + 1}</small><strong>{term || "Drop or select a finding"}</strong></button>)}</div>
               <div className="triad-term-bank" aria-label="Available findings">{[...currentTriad.terms, ...currentTriad.decoys].filter((term) => !triadSlots.includes(term)).map((term) => <button key={term} draggable onDragStart={() => setDraggedTriadTerm(term)} onDragEnd={() => setDraggedTriadTerm(null)} onClick={() => placeTriadTerm(term)}>{term}</button>)}</div>
-              <div className="triad-actions"><button className="secondary-button" onClick={() => resetTriad()}><RotateCcw size={16} /> Reset</button><button className="primary-button" disabled={triadSlots.some((slot) => !slot)} onClick={() => setTriadChecked(true)}><Check size={17} /> Check triad</button></div>
-              {triadChecked && <div className={`triad-feedback ${currentTriad.terms.every((term) => triadSlots.includes(term)) ? "correct" : "incorrect"}`}>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? <CheckCircle2 size={19} /> : <XCircle size={19} />}<div><strong>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? "That’s the complete triad." : "Almost—review the classic three findings."}</strong><p>{currentTriad.explanation}</p></div></div>}
+              <div className="triad-actions"><button className="secondary-button" onClick={() => resetTriad()}><RotateCcw size={16} /> Reset</button><button className="primary-button" disabled={triadSlots.some((slot) => !slot) || triadChecked} onClick={checkTriadAnswer}><Check size={17} /> {triadChecked ? "Checked" : "Check triad"}</button></div>
+              {triadChecked && <div className={`triad-feedback ${currentTriad.terms.every((term) => triadSlots.includes(term)) ? "correct" : "incorrect"}`}>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? <CheckCircle2 size={19} /> : <XCircle size={19} />}<div><strong>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? "That’s the complete triad." : "Saved for review—this triad will come back in Weak triads."}</strong><p>{currentTriad.explanation}</p></div></div>}
             </section>
-            <div className="triad-footer"><div><span className="section-kicker">{triadIndex === 0 ? "NEXT SET" : "TRIAD NAVIGATION"}</span><strong>{triadIndex === 0 ? TRIAD_SETS[1].title : currentTriad.title}</strong></div><div className="triad-navigation"><button className="secondary-button" disabled={triadIndex === 0} onClick={() => resetTriad(triadIndex - 1)}><ArrowLeft size={17} /> Previous triad</button><button className="primary-button" onClick={() => resetTriad((triadIndex + 1) % TRIAD_SETS.length)}>Next triad <ArrowRight size={17} /></button></div></div>
+            <div className="triad-footer"><div><span className="section-kicker">{triadReviewQueue.length ? "WEAK TRIAD REVIEW" : triadIndex === 0 ? "NEXT SET" : "TRIAD NAVIGATION"}</span><strong>{triadReviewQueue.length ? `${weakTriads.length} triad${weakTriads.length === 1 ? "" : "s"} need more review` : triadIndex === 0 ? TRIAD_SETS[1].title : currentTriad.title}</strong></div><div className="triad-navigation"><button className="secondary-button" disabled={triadIndex === 0} onClick={() => resetTriad(triadIndex - 1)}><ArrowLeft size={17} /> Previous triad</button><button className="primary-button" onClick={goToNextTriad}>{triadReviewQueue.length && triadReviewPosition === triadReviewQueue.length - 1 ? "Finish review" : "Next triad"} <ArrowRight size={17} /></button></div></div>
           </div>
         )}
 
