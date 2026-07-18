@@ -937,6 +937,12 @@ export default function Home() {
     return { label: "Step 3 - Explain why it matters", question: "What is the most important clinical meaning of this finding?", cue: `${sign.sign}: ${sign.description}` };
   }
 
+  function signRationaleForStep(sign: SignSet, step: 1 | 2 | 3) {
+    if (step === 1) return `This description is ${sign.sign}, most associated with ${sign.condition}. ${sign.meaning}`;
+    if (step === 2) return `${sign.sign} is most associated with ${sign.condition}. ${sign.meaning}`;
+    return `${sign.sign} matters because ${sign.meaning}`;
+  }
+
   function signOptionsForStep(sign: SignSet, step: 1 | 2 | 3) {
     const values = SIGN_SETS.map((item) => signAnswerForStep(item, step));
     const unique = [...new Set(values.filter((value) => value !== signAnswerForStep(sign, step)))];
@@ -1731,7 +1737,7 @@ export default function Home() {
               <h4 className="sign-question">{signPromptForStep(currentSign, signStep).question}</h4>
               <div className="sign-options" role="radiogroup" aria-label="Sign recall answers">{signOptions.map((option) => <button key={option} className={signChoice === option ? "selected" : ""} disabled={Boolean(signResult)} onClick={() => setSignChoice(option)} role="radio" aria-checked={signChoice === option}>{option}</button>)}</div>
               <div className="sign-actions"><button className="secondary-button" onClick={() => resetSign()}><RotateCcw size={16} /> Restart sign</button><button className="primary-button" disabled={!signChoice || Boolean(signResult)} onClick={checkSignAnswer}><Check size={17} /> Check answer</button></div>
-              {signResult && <div className={`sign-feedback ${signResult}`}><div>{signResult === "correct" ? <CheckCircle2 size={19} /> : <XCircle size={19} />}</div><div><strong>{signResult === "correct" ? signStep === 3 ? signReviewQueue.includes(currentSign.id) ? "Complete - this sign is cleared from review." : "Complete - review it again separately if you missed it earlier." : "Correct. Keep building the connection." : "Not quite. Re-read the cue and try again."}</strong>{signResult === "correct" && <p>{signStep === 3 ? currentSign.meaning : `Next, connect ${currentSign.sign} to the condition it most strongly suggests.`}</p>}<button onClick={continueSignRecall}>{signResult === "wrong" ? "Try again" : signStep === 3 ? "Next sign" : "Next recall step"} <ArrowRight size={15} /></button></div></div>}
+              {signResult && <div className={`sign-feedback ${signResult}`}><div>{signResult === "correct" ? <CheckCircle2 size={19} /> : <XCircle size={19} />}</div><div><strong>{signResult === "correct" ? signReviewQueue.includes(currentSign.id) ? "Complete - this sign is cleared from review." : "Complete - review it again separately if you missed it earlier." : "Not quite. Here is the clinical connection."}</strong><p>{signResult === "correct" ? currentSign.meaning : signRationaleForStep(currentSign, signStep)}</p><button onClick={continueSignRecall}>{signResult === "wrong" ? "Try again" : "Next sign"} <ArrowRight size={15} /></button></div></div>}
             </section>
             <div className="signs-footer"><button className="secondary-button" disabled={signIndex === 0} onClick={() => resetSign(signIndex - 1)}><ArrowLeft size={17} /> Previous sign</button><p>Miss a sign once and it stays in <strong>Signs to review</strong> until you answer it correctly there.</p></div>
           </div>
