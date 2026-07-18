@@ -858,10 +858,11 @@ export default function Home() {
   function checkTriadAnswer() {
     if (triadChecked || triadSlots.some((slot) => !slot)) return;
     const correct = currentTriad.terms.every((term) => triadSlots.includes(term));
+    const reviewingWeakTriad = triadReviewQueue.includes(currentTriad.id);
     setTriadChecked(true);
     setTriadStats((stats) => {
       const current = stats[currentTriad.id] || { attempts: 0, misses: 0 };
-      const next = { ...stats, [currentTriad.id]: { attempts: current.attempts + 1, misses: correct ? 0 : current.misses + 1 } };
+      const next = { ...stats, [currentTriad.id]: { attempts: current.attempts + 1, misses: correct && reviewingWeakTriad ? 0 : current.misses + (correct ? 0 : 1) } };
       localStorage.setItem("pnle-triad-stats", JSON.stringify(next));
       return next;
     });
@@ -1621,7 +1622,7 @@ export default function Home() {
               <div className="triad-slots" aria-label="Your triad answer">{triadSlots.map((term, index) => <button key={index} className={`triad-slot ${term ? "filled" : ""}`} onClick={() => term ? removeTriadTerm(index) : draggedTriadTerm && placeTriadTerm(draggedTriadTerm, index)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (draggedTriadTerm) placeTriadTerm(draggedTriadTerm, index); setDraggedTriadTerm(null); }}><small>PART {index + 1}</small><strong>{term || "Drop or select a finding"}</strong></button>)}</div>
               <div className="triad-term-bank" aria-label="Available findings">{triadOptionOrder.filter((term) => !triadSlots.includes(term)).map((term) => <button key={term} draggable onDragStart={() => setDraggedTriadTerm(term)} onDragEnd={() => setDraggedTriadTerm(null)} onClick={() => placeTriadTerm(term)}>{term}</button>)}</div>
               <div className="triad-actions"><button className="secondary-button" onClick={() => resetTriad()}><RotateCcw size={16} /> Reset</button><button className="primary-button" disabled={triadSlots.some((slot) => !slot) || triadChecked} onClick={checkTriadAnswer}><Check size={17} /> {triadChecked ? "Checked" : "Check triad"}</button></div>
-              {triadChecked && <div className={`triad-feedback ${currentTriad.terms.every((term) => triadSlots.includes(term)) ? "correct" : "incorrect"}`}>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? <CheckCircle2 size={19} /> : <XCircle size={19} />}<div><strong>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? "That’s the complete triad." : "Saved for review—this triad will come back in Weak triads."}</strong><p>{currentTriad.explanation}</p></div></div>}
+              {triadChecked && <div className={`triad-feedback ${currentTriad.terms.every((term) => triadSlots.includes(term)) ? "correct" : "incorrect"}`}>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? <CheckCircle2 size={19} /> : <XCircle size={19} />}<div><strong>{currentTriad.terms.every((term) => triadSlots.includes(term)) ? triadReviewQueue.includes(currentTriad.id) ? "That’s the complete triad. This weak triad is now clear." : "That’s the complete triad. Review it again from Weak triads to clear the miss." : "Saved for review—this triad will come back in Weak triads."}</strong><p>{currentTriad.explanation}</p></div></div>}
             </section>
             <div className="triad-footer"><div><span className="section-kicker">{triadReviewQueue.length ? "WEAK TRIAD REVIEW" : triadIndex === 0 ? "NEXT SET" : "TRIAD NAVIGATION"}</span><strong>{triadReviewQueue.length ? `${weakTriads.length} triad${weakTriads.length === 1 ? "" : "s"} need more review` : triadIndex === 0 ? TRIAD_SETS[1].title : currentTriad.title}</strong></div><div className="triad-navigation"><button className="secondary-button" disabled={triadIndex === 0} onClick={() => resetTriad(triadIndex - 1)}><ArrowLeft size={17} /> Previous triad</button><button className="primary-button" onClick={goToNextTriad}>{triadReviewQueue.length && triadReviewPosition === triadReviewQueue.length - 1 ? "Finish review" : "Next triad"} <ArrowRight size={17} /></button></div></div>
           </div>
