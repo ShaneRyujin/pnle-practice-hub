@@ -65,6 +65,7 @@ type Question = {
   choices: Record<Letter, string>;
   correct: Letter;
   rationales: Partial<Record<Letter, string>>;
+  sharedRationale?: string;
   source: "sample" | "imported";
 };
 
@@ -652,6 +653,20 @@ function cleanPdfChoice(text: string) {
   return (leak >= 0 ? compact.slice(0, leak) : compact).trim();
 }
 
+function splitChoiceAndSharedRationale(text: string) {
+  const raw = text.replace(/\r/g, "").trim();
+  // A title is optional. These common cue words, or a deliberate blank line,
+  // tell us that the text after choice D is a whole-question explanation.
+  const labelledStart = raw.search(/\n\s*(?=(?:rationale|clue|formula|calculation|remember|therefore|note|answer)\b)/i);
+  const blankLineStart = raw.search(/\n\s*\n\s*\S/);
+  const splitAt = labelledStart >= 0 ? labelledStart : blankLineStart;
+  if (splitAt < 0) return { choice: cleanPdfChoice(raw), sharedRationale: "" };
+  return {
+    choice: cleanPdfChoice(raw.slice(0, splitAt)),
+    sharedRationale: raw.slice(splitAt).replace(/^\s*(?:rationale\s*:\s*)?/i, "").replace(/\s+/g, " ").trim(),
+  };
+}
+
 function formatSataText(text: string) {
   if (!/\b(?:select\s+all\s+that\s+apply|select\s+all|sata)\b/i.test(text)) return text;
   return text.replace(/\s+(?=(?:\(?\d{1,2}[.)])\s)/g, "\n").replace(/\n{2,}/g, "\n").trim();
@@ -672,13 +687,21 @@ function parsePdfCandidates(text: string): PdfCandidate[] {
     const firstOption = optionMatches[0].index ?? block.length;
     const stem = formatSataText(block.slice(0, firstOption).replace(/^\s*\d{1,3}\.\s*/, "").replace(/\s+/g, " ").trim());
     const choices = {} as Record<Letter, string>;
-    optionMatches.slice(0, 4).forEach((option) => { choices[option[1].toUpperCase() as Letter] = cleanPdfChoice(option[2]); });
+    let sharedRationale = "";
+    optionMatches.slice(0, 4).forEach((option, optionIndex) => {
+      const letter = option[1].toUpperCase() as Letter;
+      if (optionIndex === 3) {
+        const split = splitChoiceAndSharedRationale(option[2]);
+        choices[letter] = split.choice;
+        sharedRationale = split.sharedRationale;
+      } else choices[letter] = cleanPdfChoice(option[2]);
+    });
     const feedback = optionMatches.slice(4).map((option) => `${option[1]}. ${option[2]}`).join(" ");
     const explicit = feedback.match(/\b([A-D])\.\s*(?:correct answer|correct\b)/i);
     const correct = (explicit?.[1]?.toUpperCase() || "A") as Letter;
     const rationales = {} as Partial<Record<Letter, string>>;
     [...feedback.matchAll(/\b([A-D])\.\s*([\s\S]*?)(?=\s+[A-D]\.|$)/gi)].forEach((note) => { rationales[note[1].toUpperCase() as Letter] = note[2].replace(/\s+/g, " ").trim(); });
-    return { id: `pdf-${index}`, questionNumber: Number(match[1]), situation: latestSituation || undefined, stem, choices, correct, rationales, topic: "", answerDetected: Boolean(explicit) };
+    return { id: `pdf-${index}`, questionNumber: Number(match[1]), situation: latestSituation || undefined, stem, choices, correct, rationales, sharedRationale: sharedRationale || undefined, topic: "", answerDetected: Boolean(explicit) };
   });
   return candidates.filter((item): item is PdfCandidate => Boolean(item && item.stem && LETTERS.every((letter) => item.choices[letter]))).map((item, index) => {
     const expectedSituation = Math.ceil((item.questionNumber || index + 1) / 5);
@@ -1464,6 +1487,7 @@ export default function Home() {
       choices: candidate.choices,
       correct: candidate.correct,
       rationales: candidate.rationales,
+      sharedRationale: candidate.sharedRationale,
       source: "imported",
     }));
     const nextImported = [...imported, ...batch];
@@ -1474,10 +1498,10 @@ export default function Home() {
     setPdfFileName("");
   }
 
-  function updatePdfCandidate(index: number, field: "situation" | "stem" | Letter, value: string) {
+  function updatePdfCandidate(index: number, field: "situation" | "stem" | "sharedRationale" | Letter, value: string) {
     setPdfCandidates((items) => items.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
-      if (field === "situation" || field === "stem") return { ...item, [field]: value };
+      if (field === "situation" || field === "stem" || field === "sharedRationale") return { ...item, [field]: value };
       return { ...item, choices: { ...item.choices, [field]: value } };
     }));
   }
@@ -1975,6 +1999,7 @@ export default function Home() {
                       {selected === currentQuestion.correct ? <CheckCircle2 size={22} /> : <XCircle size={22} />}
                       <div><span>{selected === currentQuestion.correct ? "Correct" : "Not quite"}</span><strong>The answer is {currentQuestion.correct}.</strong></div>
                     </div>
+                    {currentQuestion.sharedRationale && <div className="shared-rationale"><strong>Study note</strong><p>{currentQuestion.sharedRationale}</p></div>}
                     <div className="exam-rationale-grid">
                       {LETTERS.map((letter) => <div className={`rationale-item ${letter === currentQuestion.correct ? "answer" : ""}`} key={letter}><span>{letter}</span><p>{currentQuestion.rationales[letter] || (letter === currentQuestion.correct ? "This is the best answer based on the priority and clinical cues in the question." : "This option does not best address the question's priority.")}</p></div>)}
                     </div>
@@ -2087,7 +2112,7 @@ export default function Home() {
                     <div className="pdf-suggestions"><Sparkles size={16} /><span>Suggested from the PDF’s wording: <strong>{batchNp} · {batchSubject}</strong>. You can change this for the entire batch.</span></div>
                     {pdfIssues.length > 0 && <div className="pdf-issue-jump"><XCircle size={17} /><div><strong>{pdfIssues.length} item{pdfIssues.length === 1 ? " needs" : "s need"} review</strong><span>Fix the highlighted questions before importing.</span></div><nav>{pdfIssues.map(({ index }) => <a key={index} href={`#pdf-candidate-${index + 1}`}>Q{index + 1}</a>)}</nav></div>}
                     <div className="pdf-candidate-list">
-                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><div className="rationale-actions"><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill template</button><button type="button" className="generate-rationale-button" disabled={aiGenerating === `${index}-${letter}`} onClick={() => generatePdfRationale(index, letter)}><Sparkles size={12} /> {aiGenerating === `${index}-${letter}` ? "Generating…" : "Generate with AI"}</button></div></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
+                      {pdfCandidates.map((candidate, index) => { const issue = pdfCandidateIssue(candidate); return <article id={`pdf-candidate-${index + 1}`} className={`pdf-candidate ${issue ? "needs-review" : ""}`} key={candidate.id}><div><div className="pdf-candidate-title"><strong>Q{index + 1}</strong>{issue && <span>Needs review</span>}<button type="button" onClick={() => fillAllPdfRationales(index)}><Sparkles size={13} /> Fill all rationales</button></div><label className="pdf-edit-field"><span>Situation</span><textarea value={candidate.situation || ""} onChange={(event) => updatePdfCandidate(index, "situation", event.target.value)} placeholder="No shared situation detected" /></label><label className="pdf-edit-field"><span>Question</span><textarea value={candidate.stem} onChange={(event) => updatePdfCandidate(index, "stem", event.target.value)} /></label><label className="pdf-edit-field"><span>Shared rationale or clue</span><textarea value={candidate.sharedRationale || ""} onChange={(event) => updatePdfCandidate(index, "sharedRationale", event.target.value)} placeholder="Optional: explanation that applies to the whole question" /></label><div className="pdf-choice-editor">{LETTERS.map((letter) => <div className="pdf-choice-rationale" key={letter}><label className="pdf-edit-field"><span>Choice {letter}</span><textarea value={candidate.choices[letter]} onChange={(event) => updatePdfCandidate(index, letter, event.target.value)} /></label><label className="pdf-edit-field"><span>Extracted rationale</span><textarea value={candidate.rationales[letter] || ""} onChange={(event) => updatePdfRationale(index, letter, event.target.value)} placeholder="No rationale extracted" /></label><div className="rationale-actions"><button type="button" className="fill-rationale-button" onClick={() => fillPdfRationale(index, letter)}><Sparkles size={12} /> Fill template</button><button type="button" className="generate-rationale-button" disabled={aiGenerating === `${index}-${letter}`} onClick={() => generatePdfRationale(index, letter)}><Sparkles size={12} /> {aiGenerating === `${index}-${letter}` ? "Generating…" : "Generate with AI"}</button></div></div>)}</div><small>{issue || `${candidate.situation ? "Shared situation preserved" : "Stand-alone question"}${candidate.sharedRationale ? " · Shared rationale preserved" : ""} · ${candidate.answerDetected ? "Answer detected" : "Confirm answer"}`}</small></div><label><span>Answer</span><select value={candidate.correct} onChange={(event) => setPdfCandidates((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, correct: event.target.value as Letter } : item))}>{LETTERS.map((letter) => <option key={letter}>{letter}</option>)}</select></label></article>; })}
                     </div>
                     <button className="primary-button import-button" disabled={pdfIssues.length > 0} onClick={importPdfBatch}><Upload size={17} /> {pdfIssues.length ? "Fix flagged questions to import" : "Add reviewed PDF batch"}</button>
                   </section>
