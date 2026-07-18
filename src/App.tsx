@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import * as pdfjs from "pdfjs-dist";
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "./supabase";
 
 type Practice = "NP1" | "NP2" | "NP3" | "NP4" | "NP5";
 type Letter = "A" | "B" | "C" | "D";
@@ -747,6 +748,16 @@ export default function Home() {
   const [signStats, setSignStats] = useState<SignStats>({});
   const [signReviewQueue, setSignReviewQueue] = useState<string[]>([]);
   const [signReviewPosition, setSignReviewPosition] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [guestPromptOpen, setGuestPromptOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [syncReady, setSyncReady] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const markingLayerRef = useRef<SVGSVGElement>(null);
   const scratchLayerRef = useRef<SVGSVGElement>(null);
@@ -779,6 +790,53 @@ export default function Home() {
     }
     setHydrated(true);
   }, []);
+
+  function applyCloudProgress(data: Record<string, unknown>) {
+    if (Array.isArray(data.imported)) setImported(data.imported as Question[]);
+    if (Array.isArray(data.attempts)) setAttempts(data.attempts as Attempt[]);
+    if (Array.isArray(data.vaultIds)) setVaultIds(data.vaultIds as string[]);
+    if (Array.isArray(data.flagged)) setFlagged(data.flagged as string[]);
+    if (data.scratchNotes && typeof data.scratchNotes === "object") setScratchNotes(data.scratchNotes as Record<string, string>);
+    if (data.scratchMarks && typeof data.scratchMarks === "object") setScratchMarks(data.scratchMarks as Record<string, MarkPath[]>);
+    if (data.triadStats && typeof data.triadStats === "object") setTriadStats(data.triadStats as TriadStats);
+    if (data.signStats && typeof data.signStats === "object") setSignStats(data.signStats as SignStats);
+    if (data.darkMode === true || data.darkMode === false) setDarkMode(data.darkMode);
+  }
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client) return;
+    let mounted = true;
+    const loadAccount = async (id: string, email: string | null) => {
+      setSyncReady(false);
+      setUserId(id); setUserEmail(email);
+      const { data, error } = await client.from("user_progress").select("data").eq("user_id", id).maybeSingle();
+      if (!mounted) return;
+      if (!error && data?.data && typeof data.data === "object") applyCloudProgress(data.data as Record<string, unknown>);
+      setSyncReady(true);
+    };
+    client.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session) void loadAccount(session.user.id, session.user.email ?? null);
+      else if (!localStorage.getItem("pnle-guest-notice-seen")) setGuestPromptOpen(true);
+    });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session) void loadAccount(session.user.id, session.user.email ?? null);
+      else { setUserId(null); setUserEmail(null); setSyncReady(false); }
+    });
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    const client = supabase;
+    if (!client || !hydrated || !userId || !syncReady) return;
+    const data = { imported, attempts, vaultIds, flagged, scratchNotes, scratchMarks, triadStats, signStats, darkMode };
+    const timer = window.setTimeout(() => {
+      void client.from("user_progress").upsert({ user_id: userId, data, updated_at: new Date().toISOString() });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [userId, syncReady, hydrated, imported, attempts, vaultIds, flagged, scratchNotes, scratchMarks, triadStats, signStats, darkMode]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("pnle-theme");
@@ -1001,6 +1059,28 @@ export default function Home() {
     const queue = weakSigns.map((sign) => sign.id);
     setSignReviewQueue(queue); setSignReviewPosition(0);
     resetSign(SIGN_SETS.findIndex((sign) => sign.id === queue[0]));
+  }
+
+  function continueAsGuest() {
+    localStorage.setItem("pnle-guest-notice-seen", "true");
+    setGuestPromptOpen(false);
+  }
+
+  async function submitAuth() {
+    if (!supabase) { setAuthMessage("Login is almost ready. Add the two Supabase environment variables in Vercel, then redeploy."); return; }
+    if (!authEmail.trim() || authPassword.length < 6) { setAuthMessage("Enter an email and a password with at least 6 characters."); return; }
+    setAuthBusy(true); setAuthMessage(null);
+    const result = authMode === "signup"
+      ? await supabase.auth.signUp({ email: authEmail.trim(), password: authPassword, options: { emailRedirectTo: window.location.origin } })
+      : await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword });
+    setAuthBusy(false);
+    if (result.error) { setAuthMessage(result.error.message); return; }
+    if (authMode === "signup" && !result.data.session) { setAuthMessage("Check your email to confirm your account, then come back and sign in."); return; }
+    setAuthOpen(false); setGuestPromptOpen(false); setAuthPassword("");
+  }
+
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
   }
 
   function startPractice(np: Practice | "All" = "All") {
@@ -1630,7 +1710,7 @@ export default function Home() {
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
             <button className="theme-toggle" onClick={() => setDarkMode((enabled) => !enabled)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Light mode" : "Dark mode"}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}</button>
-            <button className="avatar" aria-label="Profile">N</button>
+            {userEmail ? <button className="account-button" onClick={() => void signOut()} title="Sign out"><span>{userEmail.charAt(0).toUpperCase()}</span><b>Sign out</b></button> : <button className="login-button" onClick={() => { setAuthMode("signin"); setAuthMessage(null); setAuthOpen(true); }}>Log in</button>}
           </div>
         </header>
 
@@ -2014,6 +2094,29 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {(guestPromptOpen || authOpen) && (
+        <div className="auth-backdrop" role="presentation">
+          <section className="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <button className="auth-close" onClick={() => { setAuthOpen(false); setGuestPromptOpen(false); }} aria-label="Close"><X size={18} /></button>
+            <span className="section-kicker">YOUR REVIEW, YOURS TO KEEP</span>
+            <h2 id="auth-title">{authOpen ? (authMode === "signin" ? "Welcome back" : "Save your progress") : "Save your review progress"}</h2>
+            <p>{authOpen ? "Sign in to keep your question history, Vault, triad and Signs Lab reviews synced across devices." : "Create a free account to keep your progress, Vault, triad reviews, and signs reviews across devices."}</p>
+            {authOpen && <>
+              <label>Email<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" /></label>
+              <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === "signin" ? "current-password" : "new-password"} /></label>
+              {authMessage && <div className="auth-message">{authMessage}</div>}
+              <button className="primary-button auth-submit" onClick={() => void submitAuth()} disabled={authBusy}>{authBusy ? "Please wait…" : authMode === "signin" ? "Log in" : "Create free account"}</button>
+              <button className="auth-switch" onClick={() => { setAuthMode((mode) => mode === "signin" ? "signup" : "signin"); setAuthMessage(null); }}>{authMode === "signin" ? "New here? Create an account" : "Already have an account? Log in"}</button>
+            </>}
+            {!authOpen && <>
+              <button className="primary-button auth-submit" onClick={() => { setAuthMode("signup"); setAuthOpen(true); }}>Create free account</button>
+              <button className="auth-switch" onClick={continueAsGuest}>Continue as guest</button>
+              <small>Guest progress is only stored in this browser and can be lost if browser data is cleared.</small>
+            </>}
+          </section>
+        </div>
+      )}
     </main>
   );
 }
