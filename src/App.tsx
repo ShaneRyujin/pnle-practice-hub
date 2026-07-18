@@ -44,7 +44,7 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 
 type Practice = "NP1" | "NP2" | "NP3" | "NP4" | "NP5";
 type Letter = "A" | "B" | "C" | "D";
-type View = "dashboard" | "practice" | "triads" | "bank" | "vault" | "import";
+type View = "dashboard" | "practice" | "triads" | "signs" | "bank" | "vault" | "import";
 type AnnotationColor = "yellow" | "red" | "blue" | "green";
 type PenMode = "draw" | "underline" | "circle" | "box" | "strike" | "scribble" | "erase";
 type ExamTool = "highlight" | "pen" | null;
@@ -86,6 +86,8 @@ const ANNOTATION_COLORS: Record<AnnotationColor, { label: string; ink: string; h
 
 type TriadSet = { id: string; title: string; topic: string; clues: string[]; terms: string[]; decoys: string[]; explanation: string };
 type TriadStats = Record<string, { attempts: number; misses: number }>;
+type SignSet = { id: string; sign: string; description: string; condition: string; meaning: string; category: string };
+type SignStats = Record<string, { attempts: number; misses: number }>;
 function shuffleTriadOptions(triad: TriadSet) {
   const options = [...triad.terms, ...triad.decoys];
   for (let index = options.length - 1; index > 0; index -= 1) {
@@ -112,6 +114,31 @@ const TRIAD_SETS: TriadSet[] = [
   { id: "aortic-stenosis", title: "Aortic stenosis triad", topic: "Cardiovascular", clues: ["An older adult with a harsh systolic murmur becomes breathless during ordinary activity.", "Exertion sometimes causes chest pressure or a brief loss of consciousness."], terms: ["Chest pain", "Heart failure", "Syncope"], decoys: ["Hematuria", "Guarding", "Pinpoint pupils"], explanation: "The source identifies chest pain, heart failure, and syncope as the aortic stenosis triad." },
   { id: "murphy", title: "Murphy's triad", topic: "Acute appendicitis", clues: ["A client develops worsening abdominal discomfort followed by gastrointestinal upset.", "The client is febrile and avoids moving because the pain increases with activity."], terms: ["Pain", "Vomiting", "Fever"], decoys: ["Cough", "Edema", "Bradycardia"], explanation: "Murphy's triad for acute appendicitis is pain, vomiting, and fever." },
   { id: "macdonald", title: "MacDonald triad", topic: "Behavioral health", clues: ["A child has a concerning pattern of behavior that needs a careful, nonjudgmental psychosocial assessment.", "The history includes persistent nighttime wetting plus aggressive acts that raise concern for future harmful behavior."], terms: ["Enuresis", "Fire-setting", "Animal cruelty"], decoys: ["Syncope", "Coryza", "Ataxia"], explanation: "The source lists enuresis, fire-setting, and animal cruelty as the MacDonald triad." },
+];
+
+const SIGN_SETS: SignSet[] = [
+  { id: "koplik", sign: "Koplik spots", description: "Clustered white lesions on the buccal mucosa.", condition: "Measles (rubeola)", meaning: "An early diagnostic clue that supports measles and calls for prompt isolation precautions.", category: "Infectious disease" },
+  { id: "grey-turner", sign: "Grey Turner sign", description: "Flank ecchymosis or bruising.", condition: "Hemorrhagic pancreatitis or intra-abdominal hemorrhage", meaning: "A serious bleeding clue that needs urgent assessment and escalation.", category: "Gastrointestinal" },
+  { id: "cullen", sign: "Cullen sign", description: "Ecchymosis or bruising around the umbilicus.", condition: "Acute pancreatitis or intra-abdominal hemorrhage", meaning: "Suggests possible internal bleeding and should not be treated as a minor skin finding.", category: "Gastrointestinal" },
+  { id: "kehr", sign: "Kehr sign", description: "Referred pain to the left shoulder.", condition: "Ruptured spleen", meaning: "Can indicate diaphragmatic irritation from intra-abdominal bleeding.", category: "Emergency" },
+  { id: "kernig", sign: "Kernig sign", description: "Pain or resistance on passive knee extension with the hip flexed.", condition: "Meningitis or subarachnoid hemorrhage", meaning: "A meningeal irritation clue that requires urgent neurologic evaluation.", category: "Neurologic" },
+  { id: "babinski", sign: "Babinski sign", description: "Dorsiflexion of the great toe with fanning of the other toes after plantar stimulation.", condition: "Pyramidal tract lesion in an adult", meaning: "Supports an upper motor neuron lesion in adults.", category: "Neurologic" },
+  { id: "homan", sign: "Homan sign", description: "Calf pain with dorsiflexion of the foot.", condition: "Deep vein thrombosis", meaning: "Raises concern for DVT, though it is not diagnostic and should prompt further assessment.", category: "Vascular" },
+  { id: "auspitz", sign: "Auspitz sign", description: "Pinpoint bleeding after psoriasis scales are scraped.", condition: "Psoriasis", meaning: "Supports psoriasis when seen with compatible plaques and scaling.", category: "Dermatologic" },
+  { id: "dunphy", sign: "Dunphy sign", description: "Abdominal pain that increases with coughing.", condition: "Appendicitis", meaning: "Suggests peritoneal irritation and warrants focused abdominal assessment.", category: "Gastrointestinal" },
+  { id: "dance", sign: "Dance sign", description: "Emptiness in the right lower quadrant of the abdomen.", condition: "Intussusception", meaning: "A classic physical finding that supports bowel telescoping in a symptomatic child.", category: "Pediatric" },
+  { id: "dahl", sign: "Dahl sign", description: "Pigmented calluses on the thighs or elbows from leaning forward.", condition: "Long-standing severe COPD", meaning: "Reflects chronic tripod positioning and severe respiratory effort.", category: "Respiratory" },
+  { id: "gower", sign: "Gower sign", description: "Using the hands and arms to walk up the body when rising from the floor.", condition: "Duchenne muscular dystrophy", meaning: "Shows proximal hip and thigh weakness.", category: "Neurologic" },
+  { id: "hegar", sign: "Hegar sign", description: "Softening of the cervical isthmus in pregnancy.", condition: "Early pregnancy", meaning: "A probable pregnancy sign found on pelvic examination.", category: "Maternal health" },
+  { id: "goodell", sign: "Goodell sign", description: "Softening of the vaginal portion of the cervix.", condition: "Early pregnancy", meaning: "A probable pregnancy sign that can occur during the first trimester.", category: "Maternal health" },
+  { id: "levine", sign: "Levine sign", description: "The client clenches a fist over the chest when describing pain.", condition: "Myocardial infarction", meaning: "Treat this as potentially ischemic chest pain and assess urgently.", category: "Cardiovascular" },
+  { id: "janeway", sign: "Janeway lesions", description: "Non-tender erythematous or macular lesions on the palms or soles.", condition: "Infective endocarditis", meaning: "Supports infective endocarditis in the appropriate clinical context.", category: "Cardiovascular" },
+  { id: "kussmaul", sign: "Kussmaul sign", description: "Jugular venous distention that increases on inspiration.", condition: "Right-sided heart failure", meaning: "Signals impaired right ventricular filling or restrictive cardiac disease.", category: "Cardiovascular" },
+  { id: "lhermitte", sign: "Lhermitte sign", description: "An electric sensation down the back and limbs with neck flexion.", condition: "Multiple sclerosis", meaning: "Suggests cervical spinal cord involvement and needs neurologic assessment.", category: "Neurologic" },
+  { id: "auer", sign: "Auer rods", description: "Red-staining needle-like bodies in leukemic blasts.", condition: "Acute myeloid leukemia", meaning: "A hematologic clue that supports AML rather than a benign blood disorder.", category: "Hematologic" },
+  { id: "aschoff", sign: "Aschoff bodies", description: "Inflammatory nodules found in the heart.", condition: "Rheumatic heart disease", meaning: "Characteristic pathology linked to rheumatic fever.", category: "Cardiovascular" },
+  { id: "faget", sign: "Faget sign", description: "Fever with relative bradycardia.", condition: "Typhoid fever or yellow fever", meaning: "The pulse is lower than expected for the degree of fever.", category: "Infectious disease" },
+  { id: "ewart", sign: "Ewart sign", description: "Dullness on percussion and bronchial breath sounds at the left scapular tip.", condition: "Large pericardial effusion", meaning: "Supports a significant pericardial effusion and possible hemodynamic compromise.", category: "Cardiovascular" },
 ];
 
 const sampleQuestions: Question[] = []; /* Built-in samples intentionally disabled: each student builds this bank from their own uploads.
@@ -711,6 +738,15 @@ export default function Home() {
   const [triadStats, setTriadStats] = useState<TriadStats>({});
   const [triadReviewQueue, setTriadReviewQueue] = useState<string[]>([]);
   const [triadReviewPosition, setTriadReviewPosition] = useState(0);
+  const [signIndex, setSignIndex] = useState(0);
+  const [signStep, setSignStep] = useState<1 | 2 | 3>(1);
+  const [signChoice, setSignChoice] = useState("");
+  const [signOptions, setSignOptions] = useState<string[]>(() => signOptionsForStep(SIGN_SETS[0], 1));
+  const [signResult, setSignResult] = useState<"correct" | "wrong" | null>(null);
+  const [signHadMiss, setSignHadMiss] = useState(false);
+  const [signStats, setSignStats] = useState<SignStats>({});
+  const [signReviewQueue, setSignReviewQueue] = useState<string[]>([]);
+  const [signReviewPosition, setSignReviewPosition] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const markingLayerRef = useRef<SVGSVGElement>(null);
   const scratchLayerRef = useRef<SVGSVGElement>(null);
@@ -728,6 +764,7 @@ export default function Home() {
       const savedScratch = JSON.parse(localStorage.getItem("pnle-scratch-notes") || "{}");
       const savedScratchMarks = JSON.parse(localStorage.getItem("pnle-scratch-marks") || "{}");
       const savedTriadStats = JSON.parse(localStorage.getItem("pnle-triad-stats") || "{}");
+      const savedSignStats = JSON.parse(localStorage.getItem("pnle-sign-stats") || "{}");
       if (Array.isArray(savedQuestions)) setImported(savedQuestions);
       if (Array.isArray(savedAttempts)) setAttempts(savedAttempts);
       if (Array.isArray(savedVault)) setVaultIds(savedVault);
@@ -735,6 +772,7 @@ export default function Home() {
       if (savedScratch && typeof savedScratch === "object") setScratchNotes(savedScratch);
       if (savedScratchMarks && typeof savedScratchMarks === "object") setScratchMarks(savedScratchMarks);
       if (savedTriadStats && typeof savedTriadStats === "object") setTriadStats(savedTriadStats);
+      if (savedSignStats && typeof savedSignStats === "object") setSignStats(savedSignStats);
     } catch {
       localStorage.removeItem("pnle-imported-questions");
       localStorage.removeItem("pnle-attempts");
@@ -772,6 +810,7 @@ export default function Home() {
   );
   const currentQuestion = filteredPractice[questionIndex % Math.max(filteredPractice.length, 1)];
   const currentTriad = TRIAD_SETS[triadIndex];
+  const currentSign = SIGN_SETS[signIndex];
   const currentQuestionPosition = questionIndex % Math.max(filteredPractice.length, 1);
   const currentEliminated = currentQuestion ? eliminated[currentQuestion.id] || [] : [];
   const currentMarkings = currentQuestion ? markings[currentQuestion.id] || [] : [];
@@ -836,6 +875,7 @@ export default function Home() {
     );
   }, [bankNp, bankQuery, questions]);
   const weakTriads = useMemo(() => TRIAD_SETS.filter((triad) => (triadStats[triad.id]?.misses || 0) > 0).sort((a, b) => (triadStats[b.id]?.misses || 0) - (triadStats[a.id]?.misses || 0) || (triadStats[b.id]?.attempts || 0) - (triadStats[a.id]?.attempts || 0)), [triadStats]);
+  const weakSigns = useMemo(() => SIGN_SETS.filter((sign) => (signStats[sign.id]?.misses || 0) > 0).sort((a, b) => (signStats[b.id]?.misses || 0) - (signStats[a.id]?.misses || 0) || (signStats[b.id]?.attempts || 0) - (signStats[a.id]?.attempts || 0)), [signStats]);
 
   function navigate(next: View) {
     setView(next);
@@ -885,6 +925,68 @@ export default function Home() {
     }
     if (triadReviewQueue.length) { setTriadReviewQueue([]); setTriadReviewPosition(0); }
     resetTriad((triadIndex + 1) % TRIAD_SETS.length);
+  }
+
+  function signAnswerForStep(sign: SignSet, step: 1 | 2 | 3) {
+    return step === 1 ? sign.sign : step === 2 ? sign.condition : sign.meaning;
+  }
+
+  function signPromptForStep(sign: SignSet, step: 1 | 2 | 3) {
+    if (step === 1) return { label: "Step 1 - Name the sign", question: "What is the eponymous or pathognomonic sign?", cue: sign.description };
+    if (step === 2) return { label: "Step 2 - Link the association", question: "This sign is most associated with which condition?", cue: sign.sign };
+    return { label: "Step 3 - Explain why it matters", question: "What is the most important clinical meaning of this finding?", cue: `${sign.sign}: ${sign.description}` };
+  }
+
+  function signOptionsForStep(sign: SignSet, step: 1 | 2 | 3) {
+    const values = SIGN_SETS.map((item) => signAnswerForStep(item, step));
+    const unique = [...new Set(values.filter((value) => value !== signAnswerForStep(sign, step)))];
+    const distractors = unique.sort(() => Math.random() - 0.5).slice(0, 3);
+    return [signAnswerForStep(sign, step), ...distractors].sort(() => Math.random() - 0.5);
+  }
+
+  function resetSign(nextIndex = signIndex, nextStep: 1 | 2 | 3 = 1) {
+    setSignIndex(nextIndex); setSignStep(nextStep); setSignChoice(""); setSignResult(null); setSignHadMiss(false);
+    setSignOptions(signOptionsForStep(SIGN_SETS[nextIndex], nextStep));
+  }
+
+  function checkSignAnswer() {
+    if (!signChoice || signResult) return;
+    const correct = signChoice === signAnswerForStep(currentSign, signStep);
+    const reviewingWeakSign = signReviewQueue.includes(currentSign.id);
+    setSignResult(correct ? "correct" : "wrong");
+    if (!correct && !signHadMiss) {
+      setSignHadMiss(true);
+      setSignStats((stats) => {
+        const current = stats[currentSign.id] || { attempts: 0, misses: 0 };
+        const next = { ...stats, [currentSign.id]: { attempts: current.attempts + 1, misses: current.misses + 1 } };
+        localStorage.setItem("pnle-sign-stats", JSON.stringify(next)); return next;
+      });
+    }
+    if (correct && signStep === 3) {
+      setSignStats((stats) => {
+        const current = stats[currentSign.id] || { attempts: 0, misses: 0 };
+        const next = { ...stats, [currentSign.id]: { attempts: current.attempts + (signHadMiss ? 0 : 1), misses: reviewingWeakSign ? 0 : current.misses } };
+        localStorage.setItem("pnle-sign-stats", JSON.stringify(next)); return next;
+      });
+    }
+  }
+
+  function continueSignRecall() {
+    if (signResult === "wrong") { setSignChoice(""); setSignResult(null); return; }
+    if (signStep < 3) { const nextStep = (signStep + 1) as 1 | 2 | 3; setSignStep(nextStep); setSignOptions(signOptionsForStep(currentSign, nextStep)); setSignChoice(""); setSignResult(null); return; }
+    if (signReviewQueue.length && signReviewPosition < signReviewQueue.length - 1) {
+      const nextPosition = signReviewPosition + 1; setSignReviewPosition(nextPosition);
+      resetSign(SIGN_SETS.findIndex((sign) => sign.id === signReviewQueue[nextPosition])); return;
+    }
+    if (signReviewQueue.length) { setSignReviewQueue([]); setSignReviewPosition(0); }
+    resetSign((signIndex + 1) % SIGN_SETS.length);
+  }
+
+  function startWeakSignReview() {
+    if (!weakSigns.length) return;
+    const queue = weakSigns.map((sign) => sign.id);
+    setSignReviewQueue(queue); setSignReviewPosition(0);
+    resetSign(SIGN_SETS.findIndex((sign) => sign.id === queue[0]));
   }
 
   function startPractice(np: Practice | "All" = "All") {
@@ -1448,6 +1550,7 @@ export default function Home() {
     { id: "dashboard", label: "Overview", icon: LayoutDashboard },
     { id: "practice", label: "Practice", icon: ClipboardCheck },
     { id: "triads", label: "Triad Builder", icon: Puzzle },
+    { id: "signs", label: "Signs Lab", icon: Search },
     { id: "vault", label: "The Vault", icon: BookOpen },
     { id: "import", label: "Import questions", icon: FileUp },
   ];
@@ -1508,7 +1611,7 @@ export default function Home() {
           <button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={21} /></button>
           <div>
             <span className="eyebrow">BOARD REVIEW WORKSPACE</span>
-            <h1>{view === "dashboard" ? "Your PNLE review space" : view === "practice" ? "Practice session" : view === "triads" ? "Triad Builder" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
+            <h1>{view === "dashboard" ? "Your PNLE review space" : view === "practice" ? "Practice session" : view === "triads" ? "Triad Builder" : view === "signs" ? "Signs Lab" : view === "bank" ? "Question bank" : view === "vault" ? "The Vault" : "Import questions"}</h1>
           </div>
           <div className="topbar-actions">
             <div className="streak-pill"><Flame size={17} /><span>{attempts.length ? "Keep going" : "Start your streak"}</span></div>
@@ -1610,6 +1713,21 @@ export default function Home() {
               <div className="panel-heading"><div><span className="section-kicker">QUESTION BANK</span><h3>Keep your material organized</h3></div><button className="text-button" onClick={() => navigate("bank")}>Open question bank <ArrowRight size={15} /></button></div>
               <div className="dashboard-bank-list">{questions.slice(0, 4).map((question) => <button key={question.id} onClick={() => startPractice(question.np)}><span>{question.np}</span><p>{question.stem}</p><small>{question.subject}</small></button>)}</div>
             </section>
+          </div>
+        )}
+
+        {view === "signs" && (
+          <div className="page-content signs-page">
+            <section className="signs-hero"><div><span className="section-kicker">PATHOGNOMONIC RECALL</span><h2>Spot the sign. Link the condition. Know why it matters.</h2><p>Build exam-ready recognition through a three-step recall loop based on your uploaded signs PDF.</p></div><div className="signs-hero-actions"><button className="weak-triad-button" disabled={!weakSigns.length} onClick={startWeakSignReview}><RotateCcw size={15} /> Signs to review {weakSigns.length ? `(${weakSigns.length})` : ""}</button><span>{signReviewQueue.length ? `Review ${signReviewPosition + 1} of ${signReviewQueue.length}` : `Sign ${signIndex + 1} of ${SIGN_SETS.length}`}</span></div></section>
+            <section className="panel signs-card">
+              <div className="sign-card-head"><div><span className="section-kicker">{currentSign.category.toUpperCase()}</span><h3>{signStep === 1 ? "Name the sign" : signStep === 2 ? "Link the association" : "Explain the clinical meaning"}</h3></div><span className="sign-step-chip">STEP {signStep} / 3</span></div>
+              <div className="sign-cue"><span>{signPromptForStep(currentSign, signStep).label}</span><p>{signPromptForStep(currentSign, signStep).cue}</p></div>
+              <h4 className="sign-question">{signPromptForStep(currentSign, signStep).question}</h4>
+              <div className="sign-options" role="radiogroup" aria-label="Sign recall answers">{signOptions.map((option) => <button key={option} className={signChoice === option ? "selected" : ""} disabled={Boolean(signResult)} onClick={() => setSignChoice(option)} role="radio" aria-checked={signChoice === option}>{option}</button>)}</div>
+              <div className="sign-actions"><button className="secondary-button" onClick={() => resetSign()}><RotateCcw size={16} /> Restart sign</button><button className="primary-button" disabled={!signChoice || Boolean(signResult)} onClick={checkSignAnswer}><Check size={17} /> Check answer</button></div>
+              {signResult && <div className={`sign-feedback ${signResult}`}><div>{signResult === "correct" ? <CheckCircle2 size={19} /> : <XCircle size={19} />}</div><div><strong>{signResult === "correct" ? signStep === 3 ? signReviewQueue.includes(currentSign.id) ? "Complete - this sign is cleared from review." : "Complete - review it again separately if you missed it earlier." : "Correct. Keep building the connection." : "Not quite. Re-read the cue and try again."}</strong>{signResult === "correct" && <p>{signStep === 3 ? currentSign.meaning : `Next, connect ${currentSign.sign} to the condition it most strongly suggests.`}</p>}<button onClick={continueSignRecall}>{signResult === "wrong" ? "Try again" : signStep === 3 ? "Next sign" : "Next recall step"} <ArrowRight size={15} /></button></div></div>}
+            </section>
+            <div className="signs-footer"><button className="secondary-button" disabled={signIndex === 0} onClick={() => resetSign(signIndex - 1)}><ArrowLeft size={17} /> Previous sign</button><p>Miss a sign once and it stays in <strong>Signs to review</strong> until you answer it correctly there.</p></div>
           </div>
         )}
 
